@@ -136,106 +136,86 @@ function clipSourceWindow(clip, S, E) {
 }
 
 /**
- * Build filter graph according to plan
+ * Build simple filter graph for basic multi-clip export
  */
 function buildFilter(tracks, inputsMap, options, dims) {
-  const boundaries = computeBoundaries(tracks);
-  if (boundaries.length < 2) {
-    return { filterComplex: '', intervals: [] };
-  }
-
   const { pathToIndex } = inputsMap;
   const { width, height, fpsForGraph } = dims;
   const filterParts = [];
   const intervals = [];
 
-  let concatInputsVideo = [];
-  let concatInputsAudio = [];
-
-  let intervalCount = 0;
-  for (let i = 0; i < boundaries.length - 1; i += 1) {
-    const S = boundaries[i];
-    const E = boundaries[i + 1];
-    if (E - S <= 0) continue;
-
-    const { videoClip, audioClips } = findActiveClipsForInterval(tracks, S, E);
-    const intervalLabelV = `v_${i + 1}`;
-    const intervalLabelA = `a_mix_${i + 1}`;
-
-    // Video for this interval
-    if (videoClip) {
-      const srcIndex = pathToIndex.get(videoClip.filePath);
-      const { sourceStart, sourceEnd, duration } = clipSourceWindow(videoClip, S, E);
-      if (duration > 0) {
-        filterParts.push(
-          `[${srcIndex}:v]trim=start=${sourceStart}:end=${sourceEnd},setpts=PTS-STARTPTS[${intervalLabelV}]`
-        );
-      } else {
-        // Fallback to black if degenerate
-        filterParts.push(
-          `color=c=black:size=${width}x${height}:rate=${fpsForGraph}:d=${(E - S).toFixed(6)}[${intervalLabelV}]`
-        );
-      }
-    } else {
-      // Gap → black frames
-      filterParts.push(
-        `color=c=black:size=${width}x${height}:rate=${fpsForGraph}:d=${(E - S).toFixed(6)}[${intervalLabelV}]`
-      );
+  // Find the highest track with video clips
+  let videoTrack = null;
+  for (let i = tracks.length - 1; i >= 0; i--) {
+    if (tracks[i].clips.length > 0) {
+      videoTrack = tracks[i];
+      break;
     }
-
-    // Audio for this interval
-    const audioLabels = [];
-    if (audioClips.length > 0) {
-      audioClips.forEach((clip, idx) => {
-        const srcIndex = pathToIndex.get(clip.filePath);
-        const { sourceStart, sourceEnd, duration } = clipSourceWindow(clip, S, E);
-        if (duration <= 0) return;
-        const lab = `a_${i + 1}_${idx + 1}`;
-        filterParts.push(
-          `[${srcIndex}:a]atrim=start=${sourceStart}:end=${sourceEnd},asetpts=PTS-STARTPTS[${lab}]`
-        );
-        audioLabels.push(`[${lab}]`);
-      });
-    }
-
-    if (audioLabels.length === 0) {
-      // Silence for gap
-      const sl = `a_${i + 1}_silence`;
-      filterParts.push(
-        `anullsrc=r=48000:cl=stereo:d=${(E - S).toFixed(6)}[${sl}]`
-      );
-      audioLabels.push(`[${sl}]`);
-    }
-
-    // Mix interval audio (normalize to avoid clipping)
-    filterParts.push(
-      `${audioLabels.join('')}amix=inputs=${audioLabels.length}:normalize=1:dropout_transition=0,aresample=async=1[${intervalLabelA}]`
-    );
-
-    concatInputsVideo.push(`[${intervalLabelV}]`);
-    concatInputsAudio.push(`[${intervalLabelA}]`);
-    intervals.push({ start: S, end: E });
-    intervalCount += 1;
   }
 
-  if (intervalCount === 0) {
+  if (!videoTrack || videoTrack.clips.length === 0) {
     return { filterComplex: '', intervals: [] };
   }
 
-  // Concat all intervals
+  // Collect all video clips from the top track
+  const videoClips = videoTrack.clips.sort((a, b) => a.startTime - b.startTime);
+  const videoLabels = [];
+  const audioLabels = [];
+
+  // Process each video clip
+  videoClips.forEach((clip, idx) => {
+    const srcIndex = pathToIndex.get(clip.filePath);
+    const videoLabel = `v_${idx + 1}`;
+    const audioLabel = `a_${idx + 1}`;
+    
+    // Video trim and setpts
+    filterParts.push(
+      `[${srcIndex}:v]trim=start=${clip.trimStart}:end=${clip.trimEnd},setpts=PTS-STARTPTS[${videoLabel}]`
+    );
+    
+    // Audio trim and setpts
+    filterParts.push(
+      `[${srcIndex}:a]atrim=start=${clip.trimStart}:end=${clip.trimEnd},asetpts=PTS-STARTPTS[${audioLabel}]`
+    );
+    
+    videoLabels.push(`[${videoLabel}]`);
+    audioLabels.push(`[${audioLabel}]`);
+  });
+
+  if (videoLabels.length === 0) {
+    return { filterComplex: '', intervals: [] };
+  }
+
+  // Concatenate video clips
   filterParts.push(
-    `${concatInputsVideo.join('')}${concatInputsAudio.join('')}concat=n=${intervalCount}:v=1:a=1[v_cat][a_out]`
+    `${videoLabels.join('')}concat=n=${videoLabels.length}:v=1:a=0[v_cat]`
   );
 
-  // Scale if explicit resolution requested
+  // Mix audio from all clips
+  if (audioLabels.length > 0) {
+    filterParts.push(
+      `${audioLabels.join('')}amix=inputs=${audioLabels.length}:normalize=1:dropout_transition=0,aresample=async=1[a_cat]`
+    );
+  } else {
+    // Generate silence if no audio
+    const totalDuration = videoClips.reduce((sum, clip) => sum + (clip.trimEnd - clip.trimStart), 0);
+    filterParts.push(
+      `anullsrc=r=48000:cl=stereo:d=${totalDuration.toFixed(6)}[a_cat]`
+    );
+  }
+
+  // Scale video if explicit resolution requested
   if (options.resolution && options.resolution !== 'source') {
     filterParts.push(`[v_cat]scale=${width}:${height}[v_out]`);
   } else {
-    filterParts.push(`[v_cat]copy[v_out]`);
+    filterParts.push(`[v_cat]null[v_out]`);
   }
 
+  // Copy audio
+  filterParts.push(`[a_cat]acopy[a_out]`);
+
   const filterComplex = filterParts.join(';');
-  return { filterComplex, intervals };
+  return { filterComplex, intervals: [] };
 }
 
 export async function buildExportPlan(tracks, options) {

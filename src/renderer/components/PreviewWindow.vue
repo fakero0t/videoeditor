@@ -5,15 +5,6 @@
       <div class="time-display">{{ formatTime(currentTime) }}</div>
     </div>
     
-    <!-- DEBUG BAR (temporary) -->
-    <div style="background: yellow; color: black; padding: 5px;">
-      DEBUG: currentClip={{ !!currentClip }}, 
-      clipId={{ currentClip?.id }}, 
-      hasVideoSrc={{ !!videoSrc }},
-      isLoading={{ isLoading }},
-      hasError={{ hasError }}
-    </div>
-    
     <div class="preview-container" ref="previewContainer">
       <div 
         v-if="currentClip"
