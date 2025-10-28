@@ -189,20 +189,36 @@ class FFmpegHandler {
           command.complexFilter(filterComplex);
         }
         
-        // Output options
-        command
-          .outputOptions([
-            '-c:v libx264',
-            `-preset ${this.getPreset(quality)}`,
-            `-crf ${this.getCRF(quality)}`,
-            `-r ${frameRate || 30}`,
-            '-c:a aac',
-            '-b:a 128k',
-            '-movflags +faststart'
-          ]);
+        // Build output options
+        const outOpts = [
+          '-c:v libx264',
+          `-preset ${this.getPreset(quality)}`,
+          `-crf ${this.getCRF(quality)}`,
+          '-c:a aac',
+          '-b:a 128k',
+          '-ar 48000',
+          '-ac 2',
+          '-movflags +faststart'
+        ];
         
-        // Set resolution if specified
-        if (resolution && resolution !== 'source') {
+        // Only set -r when explicitly provided (source fps -> omit)
+        if (typeof frameRate === 'number' && frameRate > 0) {
+          outOpts.push(`-r ${frameRate}`);
+        }
+        
+        // If using labeled outputs, map them
+        if (filterComplex && filterComplex.includes('[v_out]')) {
+          outOpts.push('-map [v_out]');
+        }
+        if (filterComplex && filterComplex.includes('[a_out]')) {
+          outOpts.push('-map [a_out]');
+        }
+
+        command.outputOptions(outOpts);
+        
+        // Set resolution if specified and not already handled via filter graph
+        // When filterComplex is provided, scaling is expected in the graph
+        if ((!filterComplex || !filterComplex.includes('[v_out]')) && resolution && resolution !== 'source') {
           const [width, height] = this.parseResolution(resolution);
           command.size(`${width}x${height}`);
         }

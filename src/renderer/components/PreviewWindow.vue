@@ -5,15 +5,26 @@
       <div class="time-display">{{ formatTime(currentTime) }}</div>
     </div>
     
+    <!-- DEBUG BAR (temporary) -->
+    <div style="background: yellow; color: black; padding: 5px;">
+      DEBUG: currentClip={{ !!currentClip }}, 
+      clipId={{ currentClip?.id }}, 
+      hasVideoSrc={{ !!videoSrc }},
+      isLoading={{ isLoading }},
+      hasError={{ hasError }}
+    </div>
+    
     <div class="preview-container" ref="previewContainer">
       <div 
         v-if="currentClip"
         class="video-wrapper"
         :style="videoWrapperStyle"
+        style="min-width: 100px; min-height: 100px;"
       >
         <video
           ref="videoElement"
           :src="videoSrc"
+          :key="videoSrc"
           preload="metadata"
           controls
           @loadedmetadata="onVideoLoaded"
@@ -69,6 +80,12 @@ const videoElement = ref(null);
 const playerPool = new VideoPlayerPool();
 const compositor = new MultiTrackCompositor();
 
+// Natural video dimensions and container observer for responsive fitting
+const naturalVideoWidth = ref(0);
+const naturalVideoHeight = ref(0);
+const containerSize = ref({ width: 0, height: 0 });
+let resizeObserver = null;
+
 const currentTime = ref(0);
 const isPlaying = ref(false);
 const videoAspectRatio = ref(16/9);
@@ -78,15 +95,38 @@ const hasError = ref(false);
 const currentClip = computed(() => {
   const playheadTime = timelineStore.playheadPosition;
   
+  console.log('[PreviewWindow] Computing currentClip:', {
+    playheadTime,
+    trackCount: timelineStore.tracks.length,
+    tracks: timelineStore.tracks.map(t => ({ id: t.id, clipCount: t.clips.length }))
+  });
+  
   // Use multi-track compositor to find the best clip to display
   // Priority: Track 2 (overlay) > Track 1 (background)
   const compositeInfo = compositor.getCompositeInfo(timelineStore.tracks, playheadTime);
   
+  console.log('[PreviewWindow] Composite info:', {
+    primaryClip: compositeInfo.primaryClip?.id || 'none',
+    trackCount: compositeInfo.trackCount,
+    hasMultipleTracks: compositeInfo.hasMultipleTracks
+  });
+  
   return compositeInfo.primaryClip;
 });
 
+// Normalize absolute path to exactly file:///...
+const buildFileUrl = (absPath) => {
+  const encoded = absPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  const trimmed = encoded.replace(/^\/+/, '');
+  return `file:///${trimmed}`;
+};
+
 const videoSrc = computed(() => {
-  if (!currentClip.value?.filePath) return '';
+  console.log('[PreviewWindow] Computing videoSrc, currentClip:', currentClip.value?.id);
+  if (!currentClip.value?.filePath) {
+    console.log('[PreviewWindow] No clip or filePath');
+    return '';
+  }
   
   // Convert file path to proper file:// URL for Electron
   const filePath = currentClip.value.filePath;
@@ -101,44 +141,68 @@ const videoSrc = computed(() => {
   
   // Convert absolute path to file:// URL
   if (filePath.startsWith('/')) {
-    // Encode the file path to handle spaces and special characters
-    const encodedPath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-    const fileUrl = `file://${encodedPath}`;
+    const fileUrl = buildFileUrl(filePath);
     console.log('Converted to file:// URL:', fileUrl);
     return fileUrl;
   }
   
   // For relative paths, convert to absolute first
-  const encodedPath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-  const fileUrl = `file://${encodedPath}`;
+  const fileUrl = buildFileUrl(filePath);
   console.log('Converted relative path to file:// URL:', fileUrl);
   return fileUrl;
 });
 
+// Force wrapper to fill container to avoid 0×0 visibility issues
+// Fit strategy: scale down to fit container, preserve aspect ratio, no upscaling
 const videoWrapperStyle = computed(() => {
-  if (!videoAspectRatio.value || !previewContainer.value) return {};
+  const cw = containerSize.value.width || previewContainer.value?.clientWidth || 0;
+  const ch = containerSize.value.height || previewContainer.value?.clientHeight || 0;
+  const vw = naturalVideoWidth.value || 0;
+  const vh = naturalVideoHeight.value || 0;
   
-  const container = previewContainer.value;
-  const containerWidth = container.clientWidth;
-  const containerHeight = container.clientHeight;
-  const containerAspectRatio = containerWidth / containerHeight;
+  console.log('[videoWrapperStyle] Inputs:', { cw, ch, vw, vh });
   
-  if (videoAspectRatio.value > containerAspectRatio) {
-    // Video is wider - fit to width (letterbox)
-    return {
-      width: '100%',
-      height: `${containerWidth / videoAspectRatio.value}px`,
-      margin: '0 auto'
-    };
-  } else {
-    // Video is taller - fit to height (pillarbox)
-    return {
-      width: `${containerHeight * videoAspectRatio.value}px`,
-      height: '100%',
-      margin: '0 auto'
-    };
+  // If video dimensions not yet available, use full container size
+  if (!vw || !vh) {
+    console.log('[videoWrapperStyle] No video dims yet, using full size');
+    return { width: '100%', height: '100%' };
   }
+  
+  // If container has no size, use min fallback
+  if (!cw || !ch) {
+    console.log('[videoWrapperStyle] No container size, using min fallback');
+    return { width: '320px', height: '240px', margin: '0 auto' };
+  }
+  
+  const scale = Math.min(cw / vw, ch / vh, 1);
+  let w = Math.floor(vw * scale);
+  let h = Math.floor(vh * scale);
+  
+  // Ensure minimum size
+  w = Math.max(w, 100);
+  h = Math.max(h, 100);
+  
+  console.log('[videoWrapperStyle] Computed:', { scale, w, h });
+  
+  return { width: `${w}px`, height: `${h}px`, margin: '0 auto' };
 });
+
+// Debug watcher to log all state
+watch([currentClip, () => videoSrc.value, isLoading, hasError], 
+  ([clip, src, loading, error]) => {
+    console.log('[PreviewWindow] STATE UPDATE:', {
+      hasClip: !!clip,
+      clipId: clip?.id,
+      clipFilePath: clip?.filePath,
+      videoSrc: src,
+      videoSrcLength: src?.length,
+      isLoading: loading,
+      hasError: error,
+      previewContainerExists: !!previewContainer.value
+    });
+  }, 
+  { immediate: true }
+);
 
 const onVideoLoaded = () => {
   const video = videoElement.value;
@@ -152,6 +216,9 @@ const onVideoLoaded = () => {
     networkState: video.networkState
   });
   
+  // Record natural dimensions and aspect ratio for fitting
+  naturalVideoWidth.value = video.videoWidth;
+  naturalVideoHeight.value = video.videoHeight;
   videoAspectRatio.value = video.videoWidth / video.videoHeight;
   isLoading.value = false;
   hasError.value = false;
@@ -166,11 +233,32 @@ const onVideoLoaded = () => {
 };
 
 const onVideoLoadedData = () => {
+  console.log('Video loadeddata event');
+  const video = videoElement.value;
+  if (video && video.videoWidth && video.videoHeight) {
+    naturalVideoWidth.value = video.videoWidth;
+    naturalVideoHeight.value = video.videoHeight;
+    videoAspectRatio.value = video.videoWidth / video.videoHeight;
+    console.log('Captured video dimensions from loadeddata:', {
+      width: video.videoWidth,
+      height: video.videoHeight
+    });
+  }
   isLoading.value = false;
 };
 
 const onVideoCanPlay = () => {
   console.log('Video can play');
+  const video = videoElement.value;
+  if (video && video.videoWidth && video.videoHeight) {
+    naturalVideoWidth.value = video.videoWidth;
+    naturalVideoHeight.value = video.videoHeight;
+    videoAspectRatio.value = video.videoWidth / video.videoHeight;
+    console.log('Captured video dimensions from canplay:', {
+      width: video.videoWidth,
+      height: video.videoHeight
+    });
+  }
   isLoading.value = false;
 };
 
@@ -306,13 +394,41 @@ onMounted(() => {
   if (currentClip.value) {
     isLoading.value = true;
   }
+
+  // Initialize container size + observer for responsive fitting
+  if (previewContainer.value) {
+    const el = previewContainer.value;
+    containerSize.value = { width: el.clientWidth, height: el.clientHeight };
+    resizeObserver = new ResizeObserver(entries => {
+      const cr = entries[0].contentRect;
+      containerSize.value = { width: cr.width, height: cr.height };
+    });
+    resizeObserver.observe(el);
+  }
 });
 
 onUnmounted(() => {
   // Cleanup video players
   playerPool.cleanup();
   compositor.cleanup();
+
+  // Cleanup observer
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
 });
+
+// Debug: Watch video element directly
+watch(videoElement, (newEl) => {
+  console.log('[PreviewWindow] Video element ref updated:', {
+    exists: !!newEl,
+    src: newEl?.src,
+    readyState: newEl?.readyState,
+    videoWidth: newEl?.videoWidth,
+    videoHeight: newEl?.videoHeight
+  });
+}, { immediate: true });
 </script>
 
 <style scoped>
@@ -353,12 +469,17 @@ onUnmounted(() => {
   justify-content: center;
   background: #000;
   overflow: hidden;
+  max-height: 100%;
+  min-height: 200px;
 }
 
 .video-wrapper {
   position: relative;
-  max-width: 100%;
-  max-height: 100%;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  /* temporary debug styling */
+  background: #1a1a1a;
+  border: 2px solid red;
 }
 
 .video-wrapper video {
@@ -366,6 +487,9 @@ onUnmounted(() => {
   height: 100%;
   object-fit: contain;
   display: block;
+  /* temporary debug sizing */
+  min-width: 100px;
+  min-height: 100px;
 }
 
 .no-preview {
