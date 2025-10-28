@@ -41,6 +41,7 @@ import PlayheadRenderer from '../../shared/playheadRenderer';
 import TimeDisplay from './TimeDisplay.vue';
 import TrimManager from '../../shared/trimManager';
 import TrimHandleRenderer from '../../shared/trimHandleRenderer';
+import SplitManager from '../../shared/splitManager';
 
 const timelineStore = useTimelineStore();
 const timelineCanvas = ref(null);
@@ -61,6 +62,7 @@ let scrubManager = null;
 let playheadRenderer = null;
 let trimManager = null;
 let trimHandleRenderer = null;
+let splitManager = null;
 
 // Scrubbing state
 const isScrubbing = ref(false);
@@ -70,6 +72,9 @@ const tooltipPosition = ref({ x: 0, y: 0 });
 
 // Trim state
 const currentTrimState = ref(null);
+
+// Split state
+const showSplitIndicator = ref(false);
 
 onMounted(() => {
   ctx = timelineCanvas.value.getContext('2d');
@@ -86,6 +91,15 @@ onMounted(() => {
   // Initialize trim managers
   trimManager = new TrimManager(timelineStore, timelineCanvas.value);
   trimHandleRenderer = new TrimHandleRenderer(timelineStore);
+  
+  // Initialize split manager
+  splitManager = new SplitManager(timelineStore, clipSelectionManager);
+  
+  // Expose split indicator control
+  window.setSplitIndicator = (show) => {
+    showSplitIndicator.value = show;
+    timelineStore.markDirty();
+  };
   
   // Add keyboard event listeners
   document.addEventListener('keydown', handleKeyDown);
@@ -139,6 +153,15 @@ const renderTimeline = () => {
     ctx.lineWidth = 1;
     ctx.strokeRect(0, trackY, canvasWidth.value, 100);
     
+    // Track indicator (colored stripe on left)
+    ctx.fillStyle = index === 0 ? '#4a90e2' : '#e24a90';
+    ctx.fillRect(0, trackY, 5, 100);
+    
+    // Track label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 12px Arial';
+    ctx.fillText(track.name, 15, trackY + 20);
+    
     // Draw clips in this track
     track.clips.forEach(clip => {
       drawClip(clip, trackY);
@@ -171,6 +194,11 @@ const renderTimeline = () => {
       tooltipPosition.value.x, 
       tooltipPosition.value.y
     );
+  }
+  
+  // Draw split indicator if showing
+  if (showSplitIndicator.value && splitManager) {
+    drawSplitIndicator(ctx);
   }
 };
 
@@ -260,6 +288,73 @@ const formatDuration = (seconds) => {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const drawSplitIndicator = (ctx) => {
+  if (!splitManager) return;
+  
+  const playheadX = timelineStore.playheadPosition * timelineStore.pixelsPerSecond - timelineStore.scrollPosition;
+  
+  // Find clips at playhead
+  const clips = splitManager.findClipsAtPlayhead(timelineStore.playheadPosition);
+  
+  if (clips.length === 0) return;
+  
+  ctx.save();
+  
+  clips.forEach(({ clip, trackId }) => {
+    const trackIndex = timelineStore.tracks.findIndex(t => t.id === trackId);
+    if (trackIndex === -1) return;
+    
+    const trackY = trackIndex * 100;
+    const clipY = trackY + 5;
+    const clipHeight = 90;
+    
+    // Draw split line
+    ctx.strokeStyle = '#ffff00';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 5]);
+    ctx.beginPath();
+    ctx.moveTo(playheadX, clipY);
+    ctx.lineTo(playheadX, clipY + clipHeight);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Draw split icons (scissors)
+    drawScissorsIcon(ctx, playheadX, clipY + clipHeight / 2);
+  });
+  
+  ctx.restore();
+};
+
+const drawScissorsIcon = (ctx, x, y) => {
+  ctx.save();
+  ctx.fillStyle = '#ffff00';
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1;
+  
+  // Simple scissors representation
+  // Top blade
+  ctx.beginPath();
+  ctx.arc(x - 5, y - 5, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Bottom blade
+  ctx.beginPath();
+  ctx.arc(x - 5, y + 5, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  
+  // Handles
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y - 5);
+  ctx.lineTo(x + 5, y);
+  ctx.moveTo(x - 5, y + 5);
+  ctx.lineTo(x + 5, y);
+  ctx.stroke();
+  
+  ctx.restore();
 };
 
 const zoomIn = () => {
@@ -503,6 +598,16 @@ const handleKeyDown = (event) => {
     if (!event.target.matches('input, textarea')) {
       event.preventDefault();
       clipSelectionManager.deleteSelectedClips();
+    }
+  }
+  
+  // Split clips with 'S' key
+  if (event.key.toLowerCase() === 's') {
+    if (!event.target.matches('input, textarea')) {
+      event.preventDefault();
+      if (splitManager && splitManager.canSplitAtPlayhead()) {
+        splitManager.splitAtPlayhead();
+      }
     }
   }
   

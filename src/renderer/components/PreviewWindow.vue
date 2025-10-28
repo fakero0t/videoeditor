@@ -61,11 +61,13 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useTimelineStore } from '../stores/timelineStore';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
+import MultiTrackCompositor from '../../shared/multiTrackCompositor';
 
 const timelineStore = useTimelineStore();
 const previewContainer = ref(null);
 const videoElement = ref(null);
 const playerPool = new VideoPlayerPool();
+const compositor = new MultiTrackCompositor();
 
 const currentTime = ref(0);
 const isPlaying = ref(false);
@@ -76,15 +78,11 @@ const hasError = ref(false);
 const currentClip = computed(() => {
   const playheadTime = timelineStore.playheadPosition;
   
-  // Find which clip is at the current playhead position
-  for (const track of timelineStore.tracks) {
-    for (const clip of track.clips) {
-      if (playheadTime >= clip.startTime && playheadTime < (clip.startTime + clip.duration)) {
-        return clip;
-      }
-    }
-  }
-  return null;
+  // Use multi-track compositor to find the best clip to display
+  // Priority: Track 2 (overlay) > Track 1 (background)
+  const compositeInfo = compositor.getCompositeInfo(timelineStore.tracks, playheadTime);
+  
+  return compositeInfo.primaryClip;
 });
 
 const videoSrc = computed(() => {
@@ -313,6 +311,7 @@ onMounted(() => {
 onUnmounted(() => {
   // Cleanup video players
   playerPool.cleanup();
+  compositor.cleanup();
 });
 </script>
 

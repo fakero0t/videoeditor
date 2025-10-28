@@ -170,9 +170,10 @@ class DragDropManager {
       // Moving within same track
       this.timelineStore.updateClipPosition(clip.id, finalTime);
     } else {
-      // Moving between tracks - for now, just update position
-      // TODO: Implement moveClipBetweenTracks in timeline store
-      this.timelineStore.updateClipPosition(clip.id, finalTime);
+      // Moving between tracks
+      const fromTrackId = `track-${originalTrackId}`;
+      const toTrackId = `track-${targetTrackId}`;
+      this.timelineStore.moveClipBetweenTracks(clip.id, fromTrackId, toTrackId, finalTime);
     }
     
     // Clear dragging flag

@@ -25,7 +25,10 @@
           
           <div class="transport-controls">
             <TransportControls />
-            <button @click="testFFmpeg" class="test-button">Test FFmpeg</button>
+            <div class="toolbar-buttons">
+              <SplitButton />
+              <button @click="testFFmpeg" class="test-button">Test FFmpeg</button>
+            </div>
           </div>
         </main>
       </div>
@@ -41,6 +44,7 @@ import Timeline from './components/Timeline.vue';
 import PreviewWindow from './components/PreviewWindow.vue';
 import TransportControls from './components/TransportControls.vue';
 import TrimInfo from './components/TrimInfo.vue';
+import SplitButton from './components/SplitButton.vue';
 
 const appVersion = ref('');
 const ffmpegStatus = ref('Unknown');
@@ -146,6 +150,12 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
+}
+
+.toolbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .panel-placeholder,

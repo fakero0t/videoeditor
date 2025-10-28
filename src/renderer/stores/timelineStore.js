@@ -175,6 +175,27 @@ export const useTimelineStore = defineStore('timeline', () => {
     return clips;
   };
   
+  const moveClipBetweenTracks = (clipId, fromTrackId, toTrackId, newStartTime) => {
+    const fromTrack = tracks.value.find(t => t.id === fromTrackId);
+    const toTrack = tracks.value.find(t => t.id === toTrackId);
+    
+    if (!fromTrack || !toTrack) return false;
+    
+    const clipIndex = fromTrack.clips.findIndex(c => c.id === clipId);
+    if (clipIndex === -1) return false;
+    
+    const clip = fromTrack.clips.splice(clipIndex, 1)[0];
+    clip.trackId = toTrackId;
+    clip.startTime = Math.max(0, newStartTime);
+    
+    toTrack.clips.push(clip);
+    toTrack.clips.sort((a, b) => a.startTime - b.startTime);
+    updateTimelineDuration();
+    markDirty();
+    
+    return true;
+  };
+  
   return {
     // State
     tracks,
@@ -204,7 +225,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     markDirty,
     clearDirty,
     getClipById,
-    getClipsAtTime
+    getClipsAtTime,
+    moveClipBetweenTracks
   };
 });
 
