@@ -1,0 +1,582 @@
+<template>
+  <div class="timeline-container">
+    <div class="timeline-header">
+      <canvas class="time-ruler" ref="timeRuler" :width="canvasWidth" height="30"></canvas>
+      <div class="zoom-controls">
+        <button @click="zoomOut">-</button>
+        <span>{{ Math.round(timelineStore.zoomLevel * 100) }}%</span>
+        <button @click="zoomIn">+</button>
+        <button @click="zoomToFit">Fit</button>
+        <GridSnapToggle :drag-drop-manager="dragDropManager" />
+        <TimeDisplay />
+      </div>
+    </div>
+    
+    <div class="timeline-content" ref="timelineContent">
+      <canvas 
+        ref="timelineCanvas"
+        :width="canvasWidth"
+        :height="canvasHeight"
+        @mousedown="handleMouseDown"
+        @mousemove="handleMouseMove"
+        @mouseup="handleMouseUp"
+        @wheel="handleWheel"
+        @drop="handleDrop"
+        @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
+        @mouseleave="handleMouseLeave"
+      ></canvas>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { useTimelineStore } from '../stores/timelineStore';
+import DragDropManager from '../../shared/dragDropManager';
+import ClipSelectionManager from '../../shared/clipSelectionManager';
+import GridSnapToggle from './GridSnapToggle.vue';
+import ScrubManager from '../../shared/scrubManager';
+import PlayheadRenderer from '../../shared/playheadRenderer';
+import TimeDisplay from './TimeDisplay.vue';
+
+const timelineStore = useTimelineStore();
+const timelineCanvas = ref(null);
+const timeRuler = ref(null);
+const timelineContent = ref(null);
+
+const canvasWidth = computed(() => Math.max(800, timelineStore.timelineWidth));
+const canvasHeight = computed(() => 200); // 100px per track
+
+let ctx = null;
+let timeRulerCtx = null;
+let isDragging = false;
+let dragStartX = 0;
+let animationFrameId = null;
+let dragDropManager = null;
+let clipSelectionManager = null;
+let scrubManager = null;
+let playheadRenderer = null;
+
+// Scrubbing state
+const isScrubbing = ref(false);
+const isOverPlayhead = ref(false);
+const showTimeTooltip = ref(false);
+const tooltipPosition = ref({ x: 0, y: 0 });
+
+onMounted(() => {
+  ctx = timelineCanvas.value.getContext('2d');
+  timeRulerCtx = timeRuler.value.getContext('2d');
+  
+  // Initialize drag-drop and selection managers
+  dragDropManager = new DragDropManager(timelineStore, timelineCanvas.value);
+  clipSelectionManager = new ClipSelectionManager(timelineStore);
+  
+  // Initialize scrub and playhead managers
+  scrubManager = new ScrubManager(timelineStore, null); // videoPlayerPool will be set later
+  playheadRenderer = new PlayheadRenderer(timelineCanvas.value, timelineStore);
+  
+  // Add keyboard event listeners
+  document.addEventListener('keydown', handleKeyDown);
+  
+  startRenderLoop();
+});
+
+onUnmounted(() => {
+  // Cleanup
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+  }
+  
+  // Remove keyboard event listeners
+  document.removeEventListener('keydown', handleKeyDown);
+  
+  // Cleanup managers
+  if (dragDropManager) {
+    dragDropManager.clearDragState();
+  }
+});
+
+const startRenderLoop = () => {
+  const render = () => {
+    if (timelineStore.isDirty) {
+      renderTimeline();
+      renderTimeRuler();
+      timelineStore.clearDirty();
+    }
+    animationFrameId = requestAnimationFrame(render);
+  };
+  render();
+};
+
+const renderTimeline = () => {
+  if (!ctx) return;
+  
+  // Clear canvas
+  ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value);
+  
+  // Draw tracks
+  timelineStore.tracks.forEach((track, index) => {
+    const trackY = index * 100;
+    
+    // Track background
+    ctx.fillStyle = index % 2 === 0 ? '#2a2a2a' : '#333333';
+    ctx.fillRect(0, trackY, canvasWidth.value, 100);
+    
+    // Track border
+    ctx.strokeStyle = '#555555';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, trackY, canvasWidth.value, 100);
+    
+    // Draw clips in this track
+    track.clips.forEach(clip => {
+      drawClip(clip, trackY);
+    });
+  });
+  
+  // Draw playhead
+  if (playheadRenderer) {
+    playheadRenderer.draw(ctx);
+  }
+  
+  // Draw ghost preview if dragging
+  if (dragDropManager) {
+    dragDropManager.drawGhostPreview(ctx);
+  }
+  
+  // Draw time tooltip if scrubbing
+  if (showTimeTooltip.value && isScrubbing.value) {
+    playheadRenderer.drawTimeTooltip(
+      ctx, 
+      tooltipPosition.value.x, 
+      tooltipPosition.value.y
+    );
+  }
+};
+
+const drawClip = (clip, trackY) => {
+  const x = clip.startTime * timelineStore.pixelsPerSecond - timelineStore.scrollPosition;
+  const width = clip.duration * timelineStore.pixelsPerSecond;
+  
+  // Skip if clip is not visible
+  if (x + width < 0 || x > canvasWidth.value) return;
+  
+  // Clip background
+  const isSelected = timelineStore.selectedClips.includes(clip.id);
+  ctx.fillStyle = isSelected ? '#ff6b6b' : clip.color || '#4a90e2';
+  ctx.fillRect(x, trackY + 5, width, 90);
+  
+  // Clip border
+  ctx.strokeStyle = isSelected ? '#ff4444' : '#2c5aa0';
+  ctx.lineWidth = isSelected ? 3 : 2;
+  ctx.strokeRect(x, trackY + 5, width, 90);
+  
+  // Clip label
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '12px Arial';
+  const label = clip.fileName || `Clip ${clip.id.slice(-4)}`;
+  ctx.fillText(label, x + 5, trackY + 25);
+  
+  // Clip duration text
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '10px Arial';
+  ctx.fillText(
+    formatDuration(clip.duration), 
+    x + 5, 
+    trackY + 95
+  );
+};
+
+
+const renderTimeRuler = () => {
+  if (!timeRulerCtx) return;
+  
+  const rulerWidth = canvasWidth.value;
+  const rulerHeight = 30;
+  
+  timeRulerCtx.clearRect(0, 0, rulerWidth, rulerHeight);
+  
+  // Draw time markers
+  const timeInterval = getTimeInterval();
+  const startTime = Math.floor(timelineStore.scrollPosition / timelineStore.pixelsPerSecond);
+  
+  for (let time = startTime; time < timelineStore.timelineDuration; time += timeInterval) {
+    const x = (time * timelineStore.pixelsPerSecond) - timelineStore.scrollPosition;
+    if (x < 0) continue;
+    if (x > rulerWidth) break;
+    
+    timeRulerCtx.strokeStyle = '#cccccc';
+    timeRulerCtx.lineWidth = 1;
+    timeRulerCtx.beginPath();
+    timeRulerCtx.moveTo(x, 0);
+    timeRulerCtx.lineTo(x, rulerHeight);
+    timeRulerCtx.stroke();
+    
+    // Time label
+    timeRulerCtx.fillStyle = '#ffffff';
+    timeRulerCtx.font = '12px Arial';
+    timeRulerCtx.fillText(formatTime(time), x + 2, 20);
+  }
+};
+
+const getTimeInterval = () => {
+  const pixelsPerSecond = timelineStore.pixelsPerSecond;
+  if (pixelsPerSecond < 10) return 60; // 1 minute intervals
+  if (pixelsPerSecond < 50) return 30; // 30 second intervals
+  if (pixelsPerSecond < 100) return 10; // 10 second intervals
+  return 5; // 5 second intervals
+};
+
+const formatTime = (seconds) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const formatDuration = (seconds) => {
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const zoomIn = () => {
+  timelineStore.setZoomLevel(timelineStore.zoomLevel * 1.2);
+};
+
+const zoomOut = () => {
+  timelineStore.setZoomLevel(timelineStore.zoomLevel / 1.2);
+};
+
+const zoomToFit = () => {
+  const containerWidth = timelineContent.value.clientWidth;
+  const contentWidth = timelineStore.timelineDuration * 100; // base pixels per second
+  const newZoom = Math.max(0.1, containerWidth / contentWidth);
+  timelineStore.setZoomLevel(newZoom);
+};
+
+// Mouse event handlers
+const handleMouseDown = (event) => {
+  const rect = timelineCanvas.value.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  
+  // Check if clicking on playhead handle
+  if (playheadRenderer && playheadRenderer.isOverHandle(x, y)) {
+    isScrubbing.value = true;
+    const initialTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    scrubManager.startScrub(initialTime);
+    document.body.style.cursor = 'grabbing';
+    event.preventDefault();
+    return;
+  }
+  
+  // Check if clicking near playhead line
+  if (playheadRenderer && playheadRenderer.isNearPlayhead(x, 5)) {
+    isScrubbing.value = true;
+    const initialTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    scrubManager.startScrub(initialTime);
+    document.body.style.cursor = 'grabbing';
+    event.preventDefault();
+    return;
+  }
+  
+  // Check for clip clicks
+  const clickedClip = getClipAtPosition(x, y);
+  if (clickedClip) {
+    // Select clip
+    clipSelectionManager.selectClip(clickedClip.id, event.ctrlKey);
+    
+    // Start drag from timeline
+    const trackId = Math.floor(y / 100) + 1;
+    dragDropManager.startDragFromTimeline(clickedClip, trackId, event);
+  } else {
+    // Clear selection if clicking empty space
+    clipSelectionManager.clearSelection();
+    
+    // Position playhead
+    const time = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    timelineStore.setPlayheadPosition(time);
+  }
+};
+
+const handleMouseMove = (event) => {
+  const rect = timelineCanvas.value.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  
+  // Handle scrubbing
+  if (isScrubbing.value) {
+    const newTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    scrubManager.updateScrub(newTime);
+    showTimeTooltip.value = true;
+    tooltipPosition.value = { x, y };
+    return;
+  }
+  
+  // Handle drag-drop operations
+  if (dragDropManager) {
+    dragDropManager.handleDragMove(event);
+  }
+  
+  // Handle timeline scrolling
+  if (isDragging && !dragDropManager?.dragState?.isDragging) {
+    const deltaX = event.clientX - dragStartX;
+    const newScrollPosition = timelineStore.scrollPosition - deltaX;
+    timelineStore.setScrollPosition(Math.max(0, newScrollPosition));
+    dragStartX = event.clientX;
+  }
+  
+  // Update cursor based on position
+  if (playheadRenderer) {
+    if (playheadRenderer.isOverHandle(x, y) || playheadRenderer.isNearPlayhead(x, 5)) {
+      document.body.style.cursor = 'grab';
+      isOverPlayhead.value = true;
+    } else {
+      if (!isScrubbing.value) {
+        document.body.style.cursor = 'default';
+      }
+      isOverPlayhead.value = false;
+    }
+  }
+  
+  // Show time tooltip when hovering over timeline
+  if (y < timelineCanvas.value.height) {
+    tooltipPosition.value = { x, y };
+  }
+};
+
+const handleMouseUp = (event) => {
+  // Handle scrubbing end
+  if (isScrubbing.value) {
+    scrubManager.endScrub();
+    isScrubbing.value = false;
+    showTimeTooltip.value = false;
+    document.body.style.cursor = 'default';
+    event.preventDefault();
+  }
+  
+  // Handle drag-drop operations
+  if (dragDropManager) {
+    dragDropManager.handleDragEnd(event);
+  }
+  
+  isDragging = false;
+};
+
+const handleWheel = (event) => {
+  event.preventDefault();
+  if (event.ctrlKey) {
+    // Zoom
+    if (event.deltaY < 0) zoomIn();
+    else zoomOut();
+  } else {
+    // Horizontal scroll
+    const newScrollPosition = timelineStore.scrollPosition + event.deltaY;
+    timelineStore.setScrollPosition(Math.max(0, newScrollPosition));
+  }
+};
+
+// Drop zone handlers
+const handleDrop = (event) => {
+  event.preventDefault();
+  
+  try {
+    const data = JSON.parse(event.dataTransfer.getData('application/json'));
+    if (data.type === 'media-clip') {
+      const rect = timelineCanvas.value.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      
+      const targetTrackId = Math.floor(y / 100) + 1;
+      const targetTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+      
+      // Add clip to timeline
+      timelineStore.addClipToTrack(`track-${targetTrackId}`, data.clip, targetTime);
+    }
+  } catch (error) {
+    console.error('Error handling drop:', error);
+  }
+};
+
+const handleDragOver = (event) => {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+};
+
+const handleDragLeave = (event) => {
+  // Only handle if leaving the canvas
+  if (!event.currentTarget.contains(event.relatedTarget)) {
+    // Handle drag leave
+  }
+};
+
+const handleMouseLeave = (event) => {
+  if (isScrubbing.value) {
+    scrubManager.endScrub();
+    isScrubbing.value = false;
+    showTimeTooltip.value = false;
+  }
+  document.body.style.cursor = 'default';
+};
+
+// Keyboard shortcuts
+const handleKeyDown = (event) => {
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (!event.target.matches('input, textarea')) {
+      event.preventDefault();
+      clipSelectionManager.deleteSelectedClips();
+    }
+  }
+  
+  // Frame-by-frame navigation
+  const frameTime = 1 / 30; // 30fps
+  switch (event.key) {
+    case 'ArrowLeft':
+      event.preventDefault();
+      timelineStore.setPlayheadPosition(Math.max(
+        0,
+        timelineStore.playheadPosition - frameTime
+      ));
+      if (scrubManager) {
+        scrubManager.updateVideoPreview(true);
+      }
+      break;
+      
+    case 'ArrowRight':
+      event.preventDefault();
+      timelineStore.setPlayheadPosition(Math.min(
+        timelineStore.timelineDuration,
+        timelineStore.playheadPosition + frameTime
+      ));
+      if (scrubManager) {
+        scrubManager.updateVideoPreview(true);
+      }
+      break;
+      
+    case 'Home':
+      event.preventDefault();
+      timelineStore.setPlayheadPosition(0);
+      if (scrubManager) {
+        scrubManager.updateVideoPreview(true);
+      }
+      break;
+      
+    case 'End':
+      event.preventDefault();
+      timelineStore.setPlayheadPosition(timelineStore.timelineDuration);
+      if (scrubManager) {
+        scrubManager.updateVideoPreview(true);
+      }
+      break;
+  }
+};
+
+const getClipAtPosition = (x, y) => {
+  const trackIndex = Math.floor(y / 100);
+  if (trackIndex < 0 || trackIndex >= timelineStore.tracks.length) return null;
+  
+  const track = timelineStore.tracks[trackIndex];
+  const trackY = trackIndex * 100;
+  
+  if (y < trackY + 5 || y > trackY + 95) return null;
+  
+  for (const clip of track.clips) {
+    const clipX = clip.startTime * timelineStore.pixelsPerSecond - timelineStore.scrollPosition;
+    const clipWidth = clip.duration * timelineStore.pixelsPerSecond;
+    
+    if (x >= clipX && x <= clipX + clipWidth) {
+      return clip;
+    }
+  }
+  
+  return null;
+};
+
+// Watch for timeline changes
+watch(() => timelineStore.tracks, () => {
+  timelineStore.markDirty();
+}, { deep: true });
+
+watch(() => timelineStore.playheadPosition, () => {
+  timelineStore.markDirty();
+});
+
+watch(() => timelineStore.zoomLevel, () => {
+  timelineStore.markDirty();
+});
+
+watch(() => timelineStore.scrollPosition, () => {
+  timelineStore.markDirty();
+});
+
+watch(() => timelineStore.selectedClips, () => {
+  timelineStore.markDirty();
+}, { deep: true });
+</script>
+
+<style scoped>
+.timeline-container {
+  display: flex;
+  flex-direction: column;
+  height: 250px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+}
+
+.timeline-header {
+  display: flex;
+  height: 30px;
+  background: #2a2a2a;
+  border-bottom: 1px solid #333;
+}
+
+.time-ruler {
+  flex: 1;
+  height: 30px;
+  background: #2a2a2a;
+  display: block;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: #2a2a2a;
+  border-left: 1px solid #333;
+}
+
+.zoom-controls button {
+  background: #444;
+  border: 1px solid #666;
+  color: white;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.zoom-controls button:hover {
+  background: #555;
+}
+
+.zoom-controls span {
+  color: white;
+  font-size: 12px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.timeline-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+canvas {
+  display: block;
+  cursor: crosshair;
+}
+</style>
