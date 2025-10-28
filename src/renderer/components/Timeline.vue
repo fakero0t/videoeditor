@@ -39,6 +39,8 @@ import GridSnapToggle from './GridSnapToggle.vue';
 import ScrubManager from '../../shared/scrubManager';
 import PlayheadRenderer from '../../shared/playheadRenderer';
 import TimeDisplay from './TimeDisplay.vue';
+import TrimManager from '../../shared/trimManager';
+import TrimHandleRenderer from '../../shared/trimHandleRenderer';
 
 const timelineStore = useTimelineStore();
 const timelineCanvas = ref(null);
@@ -57,12 +59,17 @@ let dragDropManager = null;
 let clipSelectionManager = null;
 let scrubManager = null;
 let playheadRenderer = null;
+let trimManager = null;
+let trimHandleRenderer = null;
 
 // Scrubbing state
 const isScrubbing = ref(false);
 const isOverPlayhead = ref(false);
 const showTimeTooltip = ref(false);
 const tooltipPosition = ref({ x: 0, y: 0 });
+
+// Trim state
+const currentTrimState = ref(null);
 
 onMounted(() => {
   ctx = timelineCanvas.value.getContext('2d');
@@ -75,6 +82,10 @@ onMounted(() => {
   // Initialize scrub and playhead managers
   scrubManager = new ScrubManager(timelineStore, null); // videoPlayerPool will be set later
   playheadRenderer = new PlayheadRenderer(timelineCanvas.value, timelineStore);
+  
+  // Initialize trim managers
+  trimManager = new TrimManager(timelineStore, timelineCanvas.value);
+  trimHandleRenderer = new TrimHandleRenderer(timelineStore);
   
   // Add keyboard event listeners
   document.addEventListener('keydown', handleKeyDown);
@@ -131,6 +142,15 @@ const renderTimeline = () => {
     // Draw clips in this track
     track.clips.forEach(clip => {
       drawClip(clip, trackY);
+      
+      // Draw trim handles on all clips
+      const isSelected = clipSelectionManager.isSelected(clip.id);
+      const isHovered = currentTrimState.value?.clip?.id === clip.id;
+      const isBeingTrimmed = trimManager.trimClip?.id === clip.id;
+      
+      // Show trim handles on all clips, but highlight based on state
+      const hoveredEdge = currentTrimState.value?.edge;
+      trimHandleRenderer.drawTrimHandles(ctx, clip, index, isHovered, hoveredEdge);
     });
   });
   
@@ -263,6 +283,21 @@ const handleMouseDown = (event) => {
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   
+  // Check if clicking on a trim handle
+  const selectedClipIds = clipSelectionManager.getSelectedClipIds();
+  const hoverState = trimManager.checkHoverState(
+    x, 
+    y, 
+    selectedClipIds.length > 0 ? selectedClipIds[0] : null
+  );
+  
+  if (hoverState) {
+    // Start trim operation
+    trimManager.startTrim(hoverState.edge, hoverState.clip, hoverState.trackId);
+    event.preventDefault();
+    return;
+  }
+  
   // Check if clicking on playhead handle
   if (playheadRenderer && playheadRenderer.isOverHandle(x, y)) {
     isScrubbing.value = true;
@@ -307,6 +342,12 @@ const handleMouseMove = (event) => {
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   
+  // Handle active trim
+  if (trimManager.trimming) {
+    trimManager.updateTrim(x);
+    return;
+  }
+  
   // Handle scrubbing
   if (isScrubbing.value) {
     const newTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
@@ -314,6 +355,26 @@ const handleMouseMove = (event) => {
     showTimeTooltip.value = true;
     tooltipPosition.value = { x, y };
     return;
+  }
+  
+  // Update hover state for trim handles
+  const selectedClipIds = clipSelectionManager.getSelectedClipIds();
+  const hoverState = trimManager.checkHoverState(
+    x, 
+    y, 
+    selectedClipIds.length > 0 ? selectedClipIds[0] : null
+  );
+  
+  if (hoverState) {
+    console.log('Trim hover detected:', hoverState);
+    document.body.style.cursor = trimManager.getCursorForEdge(hoverState.edge);
+    currentTrimState.value = hoverState;
+    renderTimeline(); // Re-render to show hover state
+  } else {
+    if (!trimManager.trimming && !isScrubbing.value && !dragDropManager.dragState.isDragging) {
+      document.body.style.cursor = 'default';
+    }
+    currentTrimState.value = null;
   }
   
   // Handle drag-drop operations
@@ -349,6 +410,13 @@ const handleMouseMove = (event) => {
 };
 
 const handleMouseUp = (event) => {
+  // Handle trim end
+  if (trimManager.trimming) {
+    trimManager.endTrim();
+    event.preventDefault();
+    return;
+  }
+  
   // Handle scrubbing end
   if (isScrubbing.value) {
     scrubManager.endScrub();
@@ -424,6 +492,13 @@ const handleMouseLeave = (event) => {
 
 // Keyboard shortcuts
 const handleKeyDown = (event) => {
+  // Cancel trim with Escape
+  if (event.key === 'Escape' && trimManager.trimming) {
+    trimManager.cancelTrim();
+    event.preventDefault();
+    return;
+  }
+  
   if (event.key === 'Delete' || event.key === 'Backspace') {
     if (!event.target.matches('input, textarea')) {
       event.preventDefault();

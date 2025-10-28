@@ -10,6 +10,7 @@
         <!-- Media Library (left panel) -->
         <aside class="media-library-panel">
           <MediaLibrary />
+          <TrimInfo />
         </aside>
         
         <!-- Main editing area (center) -->
@@ -39,6 +40,7 @@ import MediaLibrary from './components/MediaLibrary.vue';
 import Timeline from './components/Timeline.vue';
 import PreviewWindow from './components/PreviewWindow.vue';
 import TransportControls from './components/TransportControls.vue';
+import TrimInfo from './components/TrimInfo.vue';
 
 const appVersion = ref('');
 const ffmpegStatus = ref('Unknown');

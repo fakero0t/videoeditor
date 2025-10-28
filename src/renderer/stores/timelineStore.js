@@ -200,6 +200,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     setPlayheadPosition,
     setZoomLevel,
     setScrollPosition,
+    updateTimelineDuration,
     markDirty,
     clearDirty,
     getClipById,
