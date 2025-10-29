@@ -29,7 +29,7 @@ const exitToLauncher = async () => {
     : useProjectStore('voiceforge');
   
   if (projectStore.isDirty) {
-    const result = await window.electronAPI.dialog.showMessageBox({
+    const result = await window.electronAPI.showMessageBox({
       type: 'warning',
       title: 'Unsaved Changes',
       message: 'You have unsaved changes. Do you want to save before leaving?',

@@ -33,18 +33,17 @@
       
       <div v-else class="no-preview">
         <div class="no-preview-content">
-          <div class="no-preview-icon">🎬</div>
           <p>No clip selected</p>
           <p class="no-preview-subtitle">Click on a clip in the timeline to preview</p>
         </div>
       </div>
       
-      <div v-if="isLoading" class="loading-overlay">
+      <div v-if="isLoading && currentClip" class="loading-overlay">
         <div class="loading-spinner"></div>
         <p>Loading video...</p>
       </div>
       
-      <div v-if="hasError" class="error-overlay">
+      <div v-if="hasError && currentClip" class="error-overlay">
         <div class="error-icon">⚠️</div>
         <p>Error loading video</p>
         <button @click="retryLoad" class="retry-button">Retry</button>
@@ -308,12 +307,15 @@ watch(() => currentClip.value, async (newClip, oldClip) => {
       videoElement.value.currentTime = 0;
     }
   } else if (!newClip) {
-    // No clip selected
+    // No clip selected - clear all states
     if (videoElement.value) {
       videoElement.value.pause();
       videoElement.value.src = '';
       isPlaying.value = false;
     }
+    // Clear error state when no clip is selected
+    hasError.value = false;
+    isLoading.value = false;
   }
 });
 
@@ -452,10 +454,6 @@ watch(videoElement, (newEl) => {
   text-align: center;
 }
 
-.no-preview-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
-}
 
 .no-preview p {
   margin: 4px 0;
