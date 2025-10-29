@@ -32,8 +32,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { useTimelineStore } from '../stores/timelineStore';
-import { useMediaStore } from '../stores/mediaStore';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
+import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
+import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
 import DragDropManager from '../../shared/dragDropManager';
 import ClipSelectionManager from '../../shared/clipSelectionManager';
 import GridSnapToggle from './GridSnapToggle.vue';
@@ -52,8 +54,13 @@ const props = defineProps({
   }
 });
 
-const timelineStore = useTimelineStore(props.appMode);
-const mediaStore = useMediaStore(props.appMode);
+const timelineStore = props.appMode === 'clipforge' 
+  ? useClipForgeTimelineStore() 
+  : useAudioForgeTimelineStore();
+
+const mediaStore = props.appMode === 'clipforge' 
+  ? useClipForgeMediaStore() 
+  : useAudioForgeMediaStore();
 const timelineCanvas = ref(null);
 const timeRuler = ref(null);
 const timelineContent = ref(null);
@@ -457,8 +464,36 @@ const zoomIn = (mouseX = null) => {
       timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
     }
   } else {
-    // Default zoom behavior (zoom around center)
-    timelineStore.setZoomLevel(timelineStore.zoomLevel * 1.2);
+    // Zoom around playhead position
+    const playheadTime = timelineStore.playheadPosition;
+    
+    // Validate playhead time
+    if (isNaN(playheadTime) || playheadTime < 0) {
+      console.warn('Invalid playhead position for zoom in:', playheadTime);
+      return;
+    }
+    
+    const newZoomLevel = Math.max(0.1, Math.min(10, timelineStore.zoomLevel * 1.2));
+    
+    if (Math.abs(newZoomLevel - timelineStore.zoomLevel) > 0.001) {
+      const newPixelsPerSecond = 100 * newZoomLevel;
+      const playheadPixelPosition = playheadTime * newPixelsPerSecond;
+      const canvasCenter = canvasWidth.value / 2;
+      const newScrollPosition = Math.max(0, playheadPixelPosition - canvasCenter);
+      
+      console.log('Zoom in around playhead:', {
+        playheadTime,
+        oldZoom: timelineStore.zoomLevel,
+        newZoom: newZoomLevel,
+        playheadPixelPosition,
+        canvasCenter,
+        oldScroll: timelineStore.scrollPosition,
+        newScroll: newScrollPosition
+      });
+      
+      // Apply changes atomically
+      timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
+    }
   }
 };
 
@@ -478,8 +513,36 @@ const zoomOut = (mouseX = null) => {
       timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
     }
   } else {
-    // Default zoom behavior (zoom around center)
-    timelineStore.setZoomLevel(timelineStore.zoomLevel / 1.2);
+    // Zoom around playhead position
+    const playheadTime = timelineStore.playheadPosition;
+    
+    // Validate playhead time
+    if (isNaN(playheadTime) || playheadTime < 0) {
+      console.warn('Invalid playhead position for zoom out:', playheadTime);
+      return;
+    }
+    
+    const newZoomLevel = Math.max(0.1, Math.min(10, timelineStore.zoomLevel / 1.2));
+    
+    if (Math.abs(newZoomLevel - timelineStore.zoomLevel) > 0.001) {
+      const newPixelsPerSecond = 100 * newZoomLevel;
+      const playheadPixelPosition = playheadTime * newPixelsPerSecond;
+      const canvasCenter = canvasWidth.value / 2;
+      const newScrollPosition = Math.max(0, playheadPixelPosition - canvasCenter);
+      
+      console.log('Zoom out around playhead:', {
+        playheadTime,
+        oldZoom: timelineStore.zoomLevel,
+        newZoom: newZoomLevel,
+        playheadPixelPosition,
+        canvasCenter,
+        oldScroll: timelineStore.scrollPosition,
+        newScroll: newScrollPosition
+      });
+      
+      // Apply changes atomically
+      timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
+    }
   }
 };
 
@@ -689,28 +752,42 @@ const handleMouseUp = (event) => {
 const handleWheel = (event) => {
   event.preventDefault();
   if (event.ctrlKey) {
-    // Zoom around mouse position
-    const rect = timelineCanvas.value.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
+    // Zoom around playhead position
+    const playheadTime = timelineStore.playheadPosition;
     
-    // Calculate the time position under the mouse cursor before zoom
-    const mouseTime = (mouseX + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    // Validate playhead time
+    if (isNaN(playheadTime) || playheadTime < 0) {
+      console.warn('Invalid playhead position for zoom:', playheadTime);
+      return;
+    }
     
     // Determine zoom direction and factor
     const zoomFactor = event.deltaY < 0 ? 1.2 : 1 / 1.2;
     const newZoomLevel = Math.max(0.1, Math.min(10, timelineStore.zoomLevel * zoomFactor));
     
     // Only proceed if zoom level actually changed
-    if (newZoomLevel !== timelineStore.zoomLevel) {
+    if (Math.abs(newZoomLevel - timelineStore.zoomLevel) > 0.001) {
       // Calculate new pixels per second
       const newPixelsPerSecond = 100 * newZoomLevel;
       
-      // Calculate ideal scroll position to keep the same time under the mouse cursor
-      const idealScrollPosition = mouseTime * newPixelsPerSecond - mouseX;
+      // Calculate the playhead's pixel position on the canvas
+      const playheadPixelPosition = playheadTime * newPixelsPerSecond;
       
-      // If we're near the left edge, allow the right side to expand naturally
-      // by using 0 as the minimum scroll position instead of the ideal position
-      const newScrollPosition = Math.max(0, idealScrollPosition);
+      // Calculate the canvas center position
+      const canvasCenter = canvasWidth.value / 2;
+      
+      // Calculate new scroll position to keep playhead at canvas center
+      const newScrollPosition = Math.max(0, playheadPixelPosition - canvasCenter);
+      
+      console.log('Zoom around playhead:', {
+        playheadTime,
+        oldZoom: timelineStore.zoomLevel,
+        newZoom: newZoomLevel,
+        playheadPixelPosition,
+        canvasCenter,
+        oldScroll: timelineStore.scrollPosition,
+        newScroll: newScrollPosition
+      });
       
       // Apply changes atomically
       timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);

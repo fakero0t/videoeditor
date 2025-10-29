@@ -2,7 +2,8 @@
 // Builds FFmpeg inputs and filter_complex to flatten video to the highest visible track
 // and mix audio from all tracks, inserting black video and silence for gaps.
 
-import ffmpegService from '../../shared/ffmpegService';
+import clipforgeFFmpegService from '../../shared/clipforge/ffmpegService';
+import audioforgeFFmpegService from '../../shared/audioforge/ffmpegService';
 
 const RESOLUTION_MAP = {
   '720p': { width: 1280, height: 720 },
@@ -253,7 +254,10 @@ function buildFilter(tracks, inputsMap, options, dims) {
   return { filterComplex, intervals: [] };
 }
 
-export async function buildExportPlan(tracks, options) {
+export async function buildExportPlan(tracks, options, appMode = 'clipforge') {
+  const ffmpegService = appMode === 'clipforge' 
+    ? clipforgeFFmpegService 
+    : audioforgeFFmpegService;
   const { inputs, pathToIndex } = buildInputMap(tracks);
   const dims = await deriveGraphDimensionsAndFps(tracks, options);
   const { filterComplex } = buildFilter(tracks, { pathToIndex }, options, dims);

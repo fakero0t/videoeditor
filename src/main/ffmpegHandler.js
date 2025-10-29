@@ -361,6 +361,118 @@ class FFmpegHandler {
     });
   }
 
+  // Get audio metadata using ffprobe
+  async getAudioInfo(filePath) {
+    return this.queueOperation(async () => {
+      return new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(filePath, (err, metadata) => {
+          if (err) {
+            console.error('FFprobe error:', err);
+            reject(new Error(`Failed to read audio file: ${err.message}`));
+            return;
+          }
+          
+          const audioStream = metadata.streams.find(s => s.codec_type === 'audio');
+          
+          if (!audioStream) {
+            reject(new Error('No audio stream found in file'));
+            return;
+          }
+          
+          resolve({
+            duration: parseFloat(metadata.format.duration) || 0,
+            sampleRate: audioStream.sample_rate || 0,
+            channels: audioStream.channels || 0,
+            codec: audioStream.codec_name || 'unknown',
+            bitrate: parseInt(metadata.format.bit_rate) || 0,
+            fileSize: parseInt(metadata.format.size) || 0,
+            format: metadata.format.format_name || 'unknown'
+          });
+        });
+      });
+    });
+  }
+
+  // Export audio with progress tracking
+  async exportAudio(config, progressCallback) {
+    this.progressCallback = progressCallback;
+    
+    return this.queueOperation(async () => {
+      return new Promise((resolve, reject) => {
+        const {
+          inputs,
+          output,
+          quality,
+          sampleRate,
+          bitDepth,
+          channels
+        } = config;
+        
+        const command = ffmpeg();
+        
+        // Add input files
+        inputs.forEach(input => {
+          command.input(input.path);
+          if (input.startTime) {
+            command.inputOptions([`-ss ${input.startTime}`]);
+          }
+          if (input.duration) {
+            command.inputOptions([`-t ${input.duration}`]);
+          }
+        });
+        
+        // Build output options
+        const outOpts = [
+          '-c:a libmp3lame', // Use MP3 encoder
+          `-b:a ${this.getAudioBitrate(quality)}k`,
+          `-ar ${sampleRate || 44100}`,
+          `-ac ${channels || 2}`
+        ];
+        
+        command.outputOptions(outOpts);
+        
+        command
+          .output(output)
+          .on('start', (commandLine) => {
+            console.log('FFmpeg audio export command:', commandLine);
+            this.currentOperation = command;
+          })
+          .on('progress', (progress) => {
+            if (this.progressCallback) {
+              this.progressCallback({
+                percent: Math.round(progress.percent || 0),
+                currentTime: progress.timemark,
+                fps: progress.currentFps
+              });
+            }
+          })
+          .on('end', () => {
+            console.log('Audio export completed');
+            this.currentOperation = null;
+            this.progressCallback = null;
+            resolve({ success: true, output });
+          })
+          .on('error', (err) => {
+            console.error('Audio export error:', err);
+            this.currentOperation = null;
+            this.progressCallback = null;
+            reject(new Error(`Audio export failed: ${err.message}`));
+          })
+          .run();
+      });
+    });
+  }
+
+  getAudioBitrate(quality) {
+    const bitrates = {
+      'low': 128,
+      'medium': 192,
+      'high': 320,
+      'ultra': 320
+    };
+    return bitrates[quality] || 192;
+  }
+
   // Test FFmpeg installation
   async testFFmpeg() {
     try {

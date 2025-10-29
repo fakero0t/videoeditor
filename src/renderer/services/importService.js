@@ -1,9 +1,14 @@
-import ffmpegService from '../../shared/ffmpegService';
+import clipforgeFFmpegService from '../../shared/clipforge/ffmpegService';
+import audioforgeFFmpegService from '../../shared/audioforge/ffmpegService';
 import { isVideoFile } from '../../shared/utils/videoUtils';
 
 class ImportService {
-  constructor() {
+  constructor(appMode = 'clipforge') {
+    this.appMode = appMode;
     this.supportedExtensions = ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v', '.mpg', '.mpeg'];
+    this.ffmpegService = appMode === 'clipforge' 
+      ? clipforgeFFmpegService 
+      : audioforgeFFmpegService;
   }
 
   async openFileDialog() {
@@ -75,12 +80,12 @@ class ImportService {
   async processFile(filePath) {
     try {
       // Extract video metadata using FFmpeg
-      const videoInfo = await ffmpegService.getVideoInfo(filePath);
+      const videoInfo = await this.ffmpegService.getVideoInfo(filePath);
       
       // Generate thumbnail (non-blocking, can fail gracefully)
       let thumbnailPath = null;
       try {
-        thumbnailPath = await ffmpegService.generateThumbnail(filePath, 1);
+        thumbnailPath = await this.ffmpegService.generateThumbnail(filePath, 1);
       } catch (error) {
         console.warn('Failed to generate thumbnail:', error);
         // Continue without thumbnail
@@ -121,4 +126,4 @@ class ImportService {
   }
 }
 
-export default new ImportService();
+export default ImportService;

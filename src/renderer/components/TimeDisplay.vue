@@ -8,9 +8,19 @@
 
 <script setup>
 import { computed } from 'vue';
-import { useTimelineStore } from '../stores/timelineStore';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 
-const timelineStore = useTimelineStore();
+const props = defineProps({
+  appMode: {
+    type: String,
+    default: 'clipforge'
+  }
+});
+
+const timelineStore = props.appMode === 'clipforge' 
+  ? useClipForgeTimelineStore() 
+  : useAudioForgeTimelineStore();
 
 const formattedCurrentTime = computed(() => {
   return formatTime(timelineStore.playheadPosition);

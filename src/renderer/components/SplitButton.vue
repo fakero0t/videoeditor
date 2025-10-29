@@ -31,11 +31,21 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
-import { useTimelineStore } from '../stores/timelineStore';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import SplitManager from '../../shared/splitManager';
 import ClipSelectionManager from '../../shared/clipSelectionManager';
 
-const timelineStore = useTimelineStore();
+const props = defineProps({
+  appMode: {
+    type: String,
+    default: 'clipforge'
+  }
+});
+
+const timelineStore = props.appMode === 'clipforge' 
+  ? useClipForgeTimelineStore() 
+  : useAudioForgeTimelineStore();
 const clipSelectionManager = new ClipSelectionManager(timelineStore);
 const splitManager = new SplitManager(timelineStore, clipSelectionManager);
 

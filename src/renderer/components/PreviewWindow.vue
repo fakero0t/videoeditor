@@ -19,6 +19,8 @@
           controls
           playsinline
           webkit-playsinline
+          :muted="false"
+          volume="1.0"
           @loadedmetadata="onVideoLoaded"
           @error="onVideoError"
           @timeupdate="onTimeUpdate"
@@ -61,11 +63,21 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useTimelineStore } from '../stores/timelineStore';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
 import MultiTrackCompositor from '../../shared/multiTrackCompositor';
 
-const timelineStore = useTimelineStore();
+const props = defineProps({
+  appMode: {
+    type: String,
+    default: 'clipforge'
+  }
+});
+
+const timelineStore = props.appMode === 'clipforge' 
+  ? useClipForgeTimelineStore() 
+  : useAudioForgeTimelineStore();
 const previewContainer = ref(null);
 const videoElement = ref(null);
 const playerPool = new VideoPlayerPool();
@@ -87,7 +99,7 @@ const currentClip = computed(() => {
   const playheadTime = timelineStore.playheadPosition;
   
   // Use multi-track compositor to find the best clip to display
-  // Priority: Track 2 (overlay) > Track 1 (background)
+  // Priority: Topmost track > Lower tracks
   const compositeInfo = compositor.getCompositeInfo(timelineStore.tracks, playheadTime);
   
   return compositeInfo.primaryClip;
@@ -165,6 +177,10 @@ const onVideoLoaded = () => {
   const video = videoElement.value;
   if (!video) return;
   
+  // Ensure audio is enabled
+  video.muted = false;
+  video.volume = 1.0;
+  
   // Record natural dimensions and aspect ratio for fitting
   naturalVideoWidth.value = video.videoWidth;
   naturalVideoHeight.value = video.videoHeight;
@@ -183,20 +199,32 @@ const onVideoLoaded = () => {
 
 const onVideoLoadedData = () => {
   const video = videoElement.value;
-  if (video && video.videoWidth && video.videoHeight) {
-    naturalVideoWidth.value = video.videoWidth;
-    naturalVideoHeight.value = video.videoHeight;
-    videoAspectRatio.value = video.videoWidth / video.videoHeight;
+  if (video) {
+    // Ensure audio is enabled
+    video.muted = false;
+    video.volume = 1.0;
+    
+    if (video.videoWidth && video.videoHeight) {
+      naturalVideoWidth.value = video.videoWidth;
+      naturalVideoHeight.value = video.videoHeight;
+      videoAspectRatio.value = video.videoWidth / video.videoHeight;
+    }
   }
   isLoading.value = false;
 };
 
 const onVideoCanPlay = () => {
   const video = videoElement.value;
-  if (video && video.videoWidth && video.videoHeight) {
-    naturalVideoWidth.value = video.videoWidth;
-    naturalVideoHeight.value = video.videoHeight;
-    videoAspectRatio.value = video.videoWidth / video.videoHeight;
+  if (video) {
+    // Ensure audio is enabled
+    video.muted = false;
+    video.volume = 1.0;
+    
+    if (video.videoWidth && video.videoHeight) {
+      naturalVideoWidth.value = video.videoWidth;
+      naturalVideoHeight.value = video.videoHeight;
+      videoAspectRatio.value = video.videoWidth / video.videoHeight;
+    }
   }
   isLoading.value = false;
 };
@@ -303,6 +331,9 @@ watch(() => currentClip.value, async (newClip, oldClip) => {
         videoElement.value.src = newSrc;
         videoElement.value.load();
       }
+      // Ensure audio is enabled
+      videoElement.value.muted = false;
+      videoElement.value.volume = 1.0;
       // Reset current time
       videoElement.value.currentTime = 0;
     }

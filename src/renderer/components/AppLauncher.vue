@@ -17,9 +17,9 @@
         </div>
       </div>
       
-      <div class="app-card voiceforge-card" @click="$emit('select-app', 'voiceforge')">
+      <div class="app-card audioforge-card" @click="$emit('select-app', 'audioforge')">
         <div class="card-icon">🎙️</div>
-        <h2>VoiceForge</h2>
+        <h2>AudioForge</h2>
         <p>Audio-focused editor with microphone recording and timeline editing</p>
         <div class="card-features">
           <span class="feature-tag">Audio Recording</span>

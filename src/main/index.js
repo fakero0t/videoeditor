@@ -194,6 +194,27 @@ ipcMain.handle('ffmpeg:convertWebMToMP4', async (event, webmPath) => {
   }
 });
 
+// Audio-specific FFmpeg handlers
+ipcMain.handle('ffmpeg:getAudioInfo', async (event, filePath) => {
+  try {
+    return await ffmpegHandler.getAudioInfo(filePath);
+  } catch (error) {
+    throw error;
+  }
+});
+
+ipcMain.handle('ffmpeg:exportAudio', async (event, config) => {
+  try {
+    const result = await ffmpegHandler.exportAudio(config, (progress) => {
+      // Send progress updates to renderer
+      mainWindow.webContents.send('ffmpeg:progress', progress);
+    });
+    return result;
+  } catch (error) {
+    throw error;
+  }
+});
+
 // File system handlers for project management
 ipcMain.handle('fs:copyFile', async (event, source, destination) => {
   const fs = require('fs').promises;
@@ -312,7 +333,7 @@ ipcMain.handle('fs:writeFile', async (event, filePath, content) => {
 // Project save with rollback on failure
 ipcMain.handle('project:save', async (event, projectPath, projectData, filesToCopy) => {
   const projectFolder = path.dirname(projectPath);
-  const projectName = path.basename(projectPath, '.cfproj');
+  const projectName = path.basename(projectPath, path.extname(projectPath));
   const mediaFolder = path.join(projectFolder, `${projectName}_media`);
   const thumbnailFolder = path.join(mediaFolder, '.thumbnails');
   

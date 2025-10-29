@@ -1,16 +1,18 @@
 <template>
   <AppLauncher v-if="currentApp === null" @select-app="enterApp" />
-  <ClipForgeEditor v-else-if="currentApp === 'clipforge'" @back="exitToLauncher" />
-  <VoiceForgeEditor v-else-if="currentApp === 'voiceforge'" @back="exitToLauncher" />
+  <ClipForgeApp v-else-if="currentApp === 'clipforge'" @back="exitToLauncher" />
+  <AudioForgeApp v-else-if="currentApp === 'audioforge'" @back="exitToLauncher" />
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import AppLauncher from './components/AppLauncher.vue';
-import ClipForgeEditor from './components/ClipForgeEditor.vue';
-import VoiceForgeEditor from './components/VoiceForgeEditor.vue';
-import { useProjectStore } from './stores/projectStore';
-import { useRecordingStore } from './stores/recordingStore';
+import ClipForgeApp from './ClipForgeApp.vue';
+import AudioForgeApp from './AudioForgeApp.vue';
+import { useClipForgeProjectStore } from './stores/clipforge/projectStore';
+import { useAudioForgeProjectStore } from './stores/audioforge/projectStore';
+import { useClipForgeRecordingStore } from './stores/clipforge/recordingStore';
+import { useAudioForgeRecordingStore } from './stores/audioforge/recordingStore';
 
 // Navigation state
 const currentApp = ref(null);
@@ -25,8 +27,8 @@ const exitToLauncher = async () => {
   
   // Check for unsaved changes in project store
   const projectStore = appName === 'clipforge' 
-    ? useProjectStore('clipforge') 
-    : useProjectStore('voiceforge');
+    ? useClipForgeProjectStore() 
+    : useAudioForgeProjectStore();
   
   if (projectStore.isDirty) {
     const result = await window.electronAPI.showMessageBox({
@@ -47,8 +49,8 @@ const exitToLauncher = async () => {
   
   // Clear modified state from recording store only
   const recordingStore = appName === 'clipforge'
-    ? useRecordingStore('clipforge')
-    : useRecordingStore('voiceforge');
+    ? useClipForgeRecordingStore()
+    : useAudioForgeRecordingStore();
   recordingStore.reset();
   
   // Return to launcher

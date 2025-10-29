@@ -15,7 +15,7 @@
     </div>
 
     <!-- Import Status -->
-    <div v-if="mediaStore.importStatus === 'importing'" class="import-progress-bar">
+    <div v-if="mediaStore && mediaStore.importStatus === 'importing'" class="import-progress-bar">
       <div class="progress-fill" :style="{ width: mediaStore.importingProgress + '%' }"></div>
       <span class="progress-text">
         Importing {{ mediaStore.importProgress.current }} of {{ mediaStore.importProgress.total }} files...
@@ -23,7 +23,7 @@
     </div>
 
     <!-- Import Errors -->
-    <div v-if="mediaStore.importErrors.length > 0" class="import-errors">
+    <div v-if="mediaStore && mediaStore.importErrors.length > 0" class="import-errors">
       <div class="error-header">
         <span>Failed to import {{ mediaStore.importErrors.length }} file(s)</span>
         <button @click="mediaStore.clearImportErrors" class="close-btn">×</button>
@@ -38,13 +38,13 @@
     <!-- Header with import button -->
     <div class="library-header">
       <h3>Media Library</h3>
-      <button @click="handleImportClick" class="import-btn" :disabled="mediaStore.importStatus === 'importing'">
+      <button @click="handleImportClick" class="import-btn" :disabled="mediaStore && mediaStore.importStatus === 'importing'">
         + Import Files
       </button>
     </div>
 
     <!-- Clips Grid -->
-    <div v-if="mediaStore.hasMediaFiles" class="clips-grid">
+    <div v-if="mediaStore && mediaStore.hasMediaFiles" class="clips-grid">
       <div 
         v-for="clip in mediaStore.mediaFiles" 
         :key="clip.id"
@@ -119,9 +119,11 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { useMediaStore } from '../stores/mediaStore';
-import { useTimelineStore } from '../stores/timelineStore';
-import importService from '../services/importService';
+import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
+import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
+import ImportService from '../services/importService';
 import { formatDuration, formatFileSize, getVideoCodecName } from '../../shared/utils/videoUtils';
 
 // Props
@@ -132,8 +134,15 @@ const props = defineProps({
   }
 });
 
-const mediaStore = useMediaStore(props.appMode);
-const timelineStore = useTimelineStore(props.appMode);
+const mediaStore = props.appMode === 'clipforge' 
+  ? useClipForgeMediaStore() 
+  : useAudioForgeMediaStore();
+
+const timelineStore = props.appMode === 'clipforge' 
+  ? useClipForgeTimelineStore() 
+  : useAudioForgeTimelineStore();
+
+const importService = new ImportService(props.appMode);
 const isDragOver = ref(false);
 const selectedClip = ref(null);
 const draggingClip = ref(null);
@@ -252,7 +261,9 @@ const selectClip = (clip) => {
   const height = parseFloat(clip.height) || 1080;
   
   // Add clip to timeline at current playhead position
-  const timelineStore = useTimelineStore();
+  const timelineStore = props.appMode === 'clipforge' 
+    ? useClipForgeTimelineStore() 
+    : useAudioForgeTimelineStore();
   const playheadTime = timelineStore.playheadPosition;
   
   // Add to track 1 (main track)

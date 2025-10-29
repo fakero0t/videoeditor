@@ -15,14 +15,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
   setPreventQuit: (prevent) => ipcRenderer.invoke('app:setPreventQuit', prevent),
   
-  // FFmpeg APIs (will be implemented in PR #2)
+  // FFmpeg APIs
   ffmpeg: {
     getVideoInfo: (filePath) => ipcRenderer.invoke('ffmpeg:getVideoInfo', filePath),
     generateThumbnail: (videoPath, outputPath, timestamp) => 
       ipcRenderer.invoke('ffmpeg:generateThumbnail', videoPath, outputPath, timestamp),
     exportVideo: (config) => ipcRenderer.invoke('ffmpeg:exportVideo', config),
     cancelExport: () => ipcRenderer.invoke('ffmpeg:cancelExport'),
-    convertWebMToMP4: (webmPath) => ipcRenderer.invoke('ffmpeg:convertWebMToMP4', webmPath)
+    convertWebMToMP4: (webmPath) => ipcRenderer.invoke('ffmpeg:convertWebMToMP4', webmPath),
+    getAudioInfo: (filePath) => ipcRenderer.invoke('ffmpeg:getAudioInfo', filePath),
+    exportAudio: (config) => ipcRenderer.invoke('ffmpeg:exportAudio', config)
   },
   
   // Event listeners

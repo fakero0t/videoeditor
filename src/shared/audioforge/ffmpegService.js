@@ -1,31 +1,22 @@
-class FFmpegService {
+class AudioForgeFFmpegService {
   constructor() {
     this.progressCallbacks = new Set();
   }
 
-  async getVideoInfo(filePath) {
+  async getAudioInfo(filePath) {
     try {
-      return await window.electronAPI.ffmpeg.getVideoInfo(filePath);
+      return await window.electronAPI.ffmpeg.getAudioInfo(filePath);
     } catch (error) {
-      console.error('Error getting video info:', error);
-      throw new Error('Failed to read video file. Please ensure it is a valid video format.');
+      console.error('Error getting audio info:', error);
+      throw new Error('Failed to read audio file. Please ensure it is a valid audio format.');
     }
   }
 
-  async generateThumbnail(videoPath, timestamp = 1) {
+  async exportAudio(config) {
     try {
-      return await window.electronAPI.ffmpeg.generateThumbnail(videoPath, timestamp);
+      return await window.electronAPI.ffmpeg.exportAudio(config);
     } catch (error) {
-      console.error('Error generating thumbnail:', error);
-      return null; // Return null instead of throwing to allow graceful degradation
-    }
-  }
-
-  async exportVideo(config) {
-    try {
-      return await window.electronAPI.ffmpeg.exportVideo(config);
-    } catch (error) {
-      console.error('Error exporting video:', error);
+      console.error('Error exporting audio:', error);
       throw new Error(`Export failed: ${error.message}`);
     }
   }
@@ -55,4 +46,4 @@ class FFmpegService {
   }
 }
 
-export default new FFmpegService();
+export default new AudioForgeFFmpegService();

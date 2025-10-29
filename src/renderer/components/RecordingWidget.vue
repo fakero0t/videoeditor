@@ -35,9 +35,19 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { useRecordingStore } from '../stores/recordingStore';
+import { useClipForgeRecordingStore } from '../stores/clipforge/recordingStore';
+import { useAudioForgeRecordingStore } from '../stores/audioforge/recordingStore';
 
-const recordingStore = useRecordingStore();
+const props = defineProps({
+  appMode: {
+    type: String,
+    default: 'clipforge'
+  }
+});
+
+const recordingStore = props.appMode === 'clipforge' 
+  ? useClipForgeRecordingStore() 
+  : useAudioForgeRecordingStore();
 
 const emit = defineEmits(['restore', 'stop']);
 

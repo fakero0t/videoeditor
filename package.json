@@ -1,7 +1,7 @@
 {
   "name": "forge",
   "version": "1.0.0",
-  "description": "Streamlined desktop video editor",
+  "description": "ClipForge and AudioForge - Separate video and audio editing applications",
   "main": "dist-electron/main/index.js",
   "author": "Forge Team",
   "license": "MIT",

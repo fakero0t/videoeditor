@@ -1,4 +1,4 @@
-class PlaybackManager {
+class ClipForgePlaybackManager {
   constructor(timelineStore, videoPlayerPool) {
     this.timelineStore = timelineStore;
     this.videoPlayerPool = videoPlayerPool;
@@ -65,16 +65,8 @@ class PlaybackManager {
       video.pause();
     });
     
-    // Pause all audio sources
-    this.audioSources.forEach(({ source, gainNode }) => {
-      try {
-        source.disconnect();
-        gainNode.disconnect();
-      } catch (error) {
-        console.warn('Error stopping audio:', error);
-      }
-    });
-    this.audioSources.clear();
+    // NOTE: Do NOT clear audioSources Map - audio sources must persist
+    // because createMediaElementSource() can only be called once per element
   }
 
   stop() {
@@ -146,11 +138,15 @@ class PlaybackManager {
   }
 
   async switchToClip(clip) {
-    // Stop current audio
-    this.stopAllAudio();
+    // NOTE: Do NOT call stopAllAudio() here - audio sources must persist
+    // The Web Audio API graph stays connected, we just switch which video is playing
     
     // Get video element for this clip
     const video = this.videoPlayerPool.getPlayer(clip.id, clip.filePath);
+    
+    // Ensure audio is enabled
+    video.muted = false;
+    video.volume = 1.0;
     
     // Set video time to match timeline position
     const relativeTime = this.timelineStore.playheadPosition - clip.startTime;
@@ -186,14 +182,26 @@ class PlaybackManager {
         await this.audioContext.resume();
       }
       
-      // Create audio source from video element
+      // Check if we already have an audio source for this clip
+      // createMediaElementSource() can only be called ONCE per element for its lifetime
+      if (this.audioSources.has(clip.id)) {
+        // Audio source already exists and is still connected
+        // Just ensure context is running (already done above)
+        return;
+      }
+      
+      // Ensure video is unmuted and has volume before routing through Web Audio API
+      videoElement.muted = false;
+      videoElement.volume = 1.0;
+      
+      // Create audio source from video element (can only be done once per element!)
       const source = this.audioContext.createMediaElementSource(videoElement);
       const gainNode = this.audioContext.createGain();
       
       source.connect(gainNode);
       gainNode.connect(this.audioContext.destination);
       
-      // Store audio source for cleanup
+      // Store audio source permanently (never clear unless cleanup)
       this.audioSources.set(clip.id, { source, gainNode });
       
     } catch (error) {
@@ -254,4 +262,4 @@ class PlaybackManager {
   }
 }
 
-export { PlaybackManager };
+export { ClipForgePlaybackManager };

@@ -70,8 +70,10 @@
 
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { useTimelineStore } from '../stores/timelineStore';
-import ffmpegService from '../../shared/ffmpegService';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
+import clipforgeFFmpegService from '../../shared/clipforge/ffmpegService';
+import audioforgeFFmpegService from '../../shared/audioforge/ffmpegService';
 import { buildExportPlan } from '../services/exportAssembler';
 
 const props = defineProps({
@@ -80,7 +82,13 @@ const props = defineProps({
 });
 const emit = defineEmits(['close']);
 
-const timelineStore = useTimelineStore(props.appMode);
+const timelineStore = props.appMode === 'clipforge' 
+  ? useClipForgeTimelineStore() 
+  : useAudioForgeTimelineStore();
+
+const ffmpegService = props.appMode === 'clipforge' 
+  ? clipforgeFFmpegService 
+  : audioforgeFFmpegService;
 
 const resolution = ref('source');
 const fps = ref('source');
@@ -183,7 +191,7 @@ const startExport = async () => {
       fps: fps.value,
       quality: quality.value,
       output: outputPath.value
-    });
+    }, props.appMode);
 
     // Kick export
     const result = await ffmpegService.exportVideo(plan);

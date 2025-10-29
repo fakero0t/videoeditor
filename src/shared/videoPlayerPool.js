@@ -23,7 +23,8 @@ class VideoPlayerPool {
     const video = document.createElement('video');
     video.src = videoPath;
     video.preload = 'metadata';
-    video.muted = true; // Prevent autoplay issues
+    video.muted = false; // Enable audio for playback
+    video.volume = 1.0; // Set full volume
     video.style.display = 'none';
     video.style.position = 'absolute';
     video.style.top = '-9999px';

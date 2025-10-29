@@ -36,7 +36,7 @@
         🎬 Screen + Webcam
       </button>
       <button 
-        v-if="props.appMode === 'voiceforge'"
+        v-if="props.appMode === 'audioforge'"
         @click="currentTab = 'microphone'" 
         :class="{ active: currentTab === 'microphone' }"
         class="tab-btn"
@@ -51,7 +51,7 @@
         <label>Screen/Window Source:</label>
         <div class="source-list-container">
           <div class="source-list-header">
-            <span class="source-count">{{ recordingStore.availableScreenSources.length }} sources</span>
+            <span class="source-count">{{ recordingStore.availableScreenSources?.length || 0 }} sources</span>
             <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
               Refresh
             </button>
@@ -64,7 +64,7 @@
               No sources available
             </div>
             <div 
-              v-for="source in recordingStore.availableScreenSources" 
+              v-for="source in (recordingStore.availableScreenSources || [])" 
               :key="source.id"
               @click="selectScreenSource(source)"
               :class="{ 
@@ -141,7 +141,7 @@
         ⚠️ Low disk space (< 5GB available). Recording may fail.
       </div>
       
-      <div v-if="!recordingStore.hasScreenPermission && recordingStore.availableScreenSources.length === 0" class="warning-message">
+      <div v-if="appMode === 'clipforge' && !recordingStore.hasScreenPermission && recordingStore.availableScreenSources.length === 0" class="warning-message">
         ⚠️ Screen recording permission required. Click "Check Permissions" below.
       </div>
       <div v-if="recordingStore.selectedMicrophoneSource && !recordingStore.hasMicrophonePermission" class="warning-message">
@@ -301,7 +301,7 @@
       </div>
     </div>
     
-    <!-- Microphone Only Recording Tab (VoiceForge) -->
+    <!-- Microphone Only Recording Tab (AudioForge) -->
     <div v-if="currentTab === 'microphone'" class="tab-content">
       <div class="recording-options">
         <div class="option-group">
@@ -384,6 +384,7 @@
   <!-- Recording Widget (shown when minimized during recording) -->
   <RecordingWidget 
     v-if="isWidgetVisible"
+    :app-mode="appMode"
     @restore="restorePanel"
     @stop="stopRecording"
   />
@@ -393,6 +394,7 @@
     :is-visible="showPermissionModal"
     :has-screen-permission="recordingStore.hasScreenPermission"
     :has-microphone-permission="recordingStore.hasMicrophonePermission"
+    :app-mode="appMode"
     @close="showPermissionModal = false"
     @recheck="showPermissionCheck"
   />
@@ -400,8 +402,10 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useRecordingStore } from '../stores/recordingStore';
-import { useMediaStore } from '../stores/mediaStore';
+import { useClipForgeRecordingStore } from '../stores/clipforge/recordingStore';
+import { useAudioForgeRecordingStore } from '../stores/audioforge/recordingStore';
+import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
+import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
 import { ScreenRecorder } from '../../shared/screenRecorder';
 import RecordingWidget from './RecordingWidget.vue';
 import PermissionModal from './PermissionModal.vue';
@@ -414,12 +418,17 @@ const props = defineProps({
   }
 });
 
-const recordingStore = useRecordingStore(props.appMode);
-const mediaStore = useMediaStore(props.appMode);
+const recordingStore = props.appMode === 'clipforge' 
+  ? useClipForgeRecordingStore() 
+  : useAudioForgeRecordingStore();
+
+const mediaStore = props.appMode === 'clipforge' 
+  ? useClipForgeMediaStore() 
+  : useAudioForgeMediaStore();
 
 const isPanelOpen = ref(false);
 const isWidgetVisible = ref(false);
-const currentTab = ref(props.appMode === 'voiceforge' ? 'microphone' : 'screen');
+const currentTab = ref(props.appMode === 'audioforge' ? 'microphone' : 'screen');
 const showPermissionModal = ref(false);
 
 // Webcam preview
@@ -476,7 +485,7 @@ const openPanel = async () => {
     
     // Check disk space
     const diskSpace = await screenRecorder.checkDiskSpace();
-    recordingStore.setDiskSpace(diskSpace);
+    recordingStore.setAvailableDiskSpace(diskSpace);
     
     // Force a permission recheck after sources are loaded
     await checkPermissionsSilently();
@@ -560,7 +569,11 @@ const stopDrag = () => {
 // Permission checking
 const checkPermissions = async () => {
   const permissions = await screenRecorder.checkPermissions();
-  recordingStore.setPermissions(permissions.screen, permissions.microphone);
+  if (props.appMode === 'clipforge') {
+    recordingStore.setPermissions(permissions.screen, permissions.microphone);
+  } else {
+    recordingStore.setPermissions(false, permissions.microphone);
+  }
   
   // Don't automatically show modal - let user manually trigger it
   // The modal should only show when user explicitly clicks "Check Permissions"
@@ -570,53 +583,71 @@ const checkPermissions = async () => {
 const checkPermissionsSilently = async () => {
   const permissions = await screenRecorder.checkPermissions();
   
-  // Test actual screen capture capability first
-  const canCaptureScreen = await testScreenCapturePermissions();
-  
-  // If we can actually capture screen, we definitely have permission
-  if (canCaptureScreen) {
-    console.log('Screen capture test successful - screen permission is definitely granted');
-    permissions.screen = true;
-  } else if (!permissions.screen && recordingStore.availableScreenSources.length > 0) {
+  // Test actual screen capture capability first (only for ClipForge)
+  if (props.appMode === 'clipforge') {
+    const canCaptureScreen = await testScreenCapturePermissions();
+    
+    // If we can actually capture screen, we definitely have permission
+    if (canCaptureScreen) {
+      console.log('Screen capture test successful - screen permission is definitely granted');
+      permissions.screen = true;
+    }
+  } else if (props.appMode === 'clipforge' && !permissions.screen && recordingStore.availableScreenSources?.length > 0) {
     console.log('Main process says screen permission denied, but we have screen sources - assuming permission is granted');
     permissions.screen = true;
   }
   
-  // Always trust the actual capability test over the API response
-  if (canCaptureScreen && !permissions.screen) {
-    console.log('Overriding API response - screen capture works, so permission is granted');
-    permissions.screen = true;
+  // Always trust the actual capability test over the API response (only for ClipForge)
+  if (props.appMode === 'clipforge') {
+    const canCaptureScreen = await testScreenCapturePermissions();
+    if (canCaptureScreen && !permissions.screen) {
+      console.log('Overriding API response - screen capture works, so permission is granted');
+      permissions.screen = true;
+    }
   }
   
-  recordingStore.setPermissions(permissions.screen, permissions.microphone);
+  if (props.appMode === 'clipforge') {
+    recordingStore.setPermissions(permissions.screen, permissions.microphone);
+  } else {
+    recordingStore.setPermissions(false, permissions.microphone);
+  }
 };
 
 // Show permission modal only when user explicitly requests it
 const showPermissionCheck = async () => {
   const permissions = await screenRecorder.checkPermissions();
   
-  // Test actual screen capture capability first
-  const canCaptureScreen = await testScreenCapturePermissions();
-  
-  // If we can actually capture screen, we definitely have permission
-  if (canCaptureScreen) {
-    console.log('Screen capture test successful - screen permission is definitely granted');
-    permissions.screen = true;
-  } else if (!permissions.screen && recordingStore.availableScreenSources.length > 0) {
+  // Test actual screen capture capability first (only for ClipForge)
+  if (props.appMode === 'clipforge') {
+    const canCaptureScreen = await testScreenCapturePermissions();
+    
+    // If we can actually capture screen, we definitely have permission
+    if (canCaptureScreen) {
+      console.log('Screen capture test successful - screen permission is definitely granted');
+      permissions.screen = true;
+    }
+  } else if (props.appMode === 'clipforge' && !permissions.screen && recordingStore.availableScreenSources?.length > 0) {
     console.log('Main process says screen permission denied, but we have screen sources - assuming permission is granted');
     permissions.screen = true;
   }
   
-  // Always trust the actual capability test over the API response
-  if (canCaptureScreen && !permissions.screen) {
-    console.log('Overriding API response - screen capture works, so permission is granted');
-    permissions.screen = true;
+  // Always trust the actual capability test over the API response (only for ClipForge)
+  if (props.appMode === 'clipforge') {
+    const canCaptureScreen = await testScreenCapturePermissions();
+    if (canCaptureScreen && !permissions.screen) {
+      console.log('Overriding API response - screen capture works, so permission is granted');
+      permissions.screen = true;
+    }
   }
   
-  recordingStore.setPermissions(permissions.screen, permissions.microphone);
+  if (props.appMode === 'clipforge') {
+    recordingStore.setPermissions(permissions.screen, permissions.microphone);
+  } else {
+    recordingStore.setPermissions(false, permissions.microphone);
+  }
   
   // Only show modal if permissions are actually missing
-  const needsScreenPermission = currentTab.value === 'screen' && !permissions.screen;
+  const needsScreenPermission = props.appMode === 'clipforge' && currentTab.value === 'screen' && !permissions.screen;
   const needsMicrophonePermission = recordingStore.selectedMicrophoneSource && !permissions.microphone;
   
   if (needsScreenPermission || needsMicrophonePermission) {
@@ -679,18 +710,25 @@ const testScreenRecording = async (screenSource) => {
 // Source management
 const refreshSources = async () => {
   try {
-    // Get desktop sources
-    const sources = await window.electronAPI.recording.getDesktopSources();
-    recordingStore.setAvailableScreenSources(sources);
+    // Get desktop sources (only for ClipForge)
+    if (props.appMode === 'clipforge') {
+      const sources = await window.electronAPI.recording.getDesktopSources();
+      recordingStore.setAvailableScreenSources(sources);
+    }
     
-    // Test screen capture permissions and update accordingly
-    const canCaptureScreen = await testScreenCapturePermissions();
-    if (canCaptureScreen) {
-      console.log('Screen capture test successful - screen permission is definitely granted');
-      recordingStore.setPermissions(true, recordingStore.hasMicrophonePermission);
-    } else if (sources.length > 0 && !recordingStore.hasScreenPermission) {
-      console.log('Screen sources available but permission false - forcing permission update');
-      recordingStore.setPermissions(true, recordingStore.hasMicrophonePermission);
+    // Test screen capture permissions and update accordingly (only for ClipForge)
+    if (props.appMode === 'clipforge') {
+      const canCaptureScreen = await testScreenCapturePermissions();
+      if (canCaptureScreen) {
+        console.log('Screen capture test successful - screen permission is definitely granted');
+        recordingStore.setPermissions(true, recordingStore.hasMicrophonePermission);
+      } else {
+        const sources = await window.electronAPI.recording.getDesktopSources();
+        if (sources.length > 0 && !recordingStore.hasScreenPermission) {
+          console.log('Screen sources available but permission false - forcing permission update');
+          recordingStore.setPermissions(true, recordingStore.hasMicrophonePermission);
+        }
+      }
     }
     
     // Get microphone and webcam sources
@@ -729,8 +767,8 @@ const startRecording = async () => {
     // Force a fresh permission check before recording
     await checkPermissionsSilently();
     
-    // Final permission check
-    if (!recordingStore.hasScreenPermission) {
+    // Final permission check (only for ClipForge)
+    if (props.appMode === 'clipforge' && !recordingStore.hasScreenPermission) {
       console.error('Screen permission not granted - cannot start recording');
       showPermissionModal.value = true;
       return;
@@ -1114,12 +1152,22 @@ window.testScreenCapturePermissions = testScreenCapturePermissions;
 
 // Initialize
 onMounted(async () => {
-  // Don't initialize recording functionality on mount
-  // Only initialize when panel is actually opened
-  console.log('RecordingPanel mounted - waiting for user to open panel');
+  // Load microphone sources immediately for AudioForge
+  if (props.appMode === 'audioforge') {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const mics = devices.filter(device => device.kind === 'audioinput');
+      recordingStore.setAvailableMicrophoneSources(mics);
+      console.log('Loaded microphone sources for AudioForge:', mics.length);
+    } catch (error) {
+      console.error('Failed to load microphone sources:', error);
+    }
+  }
   
   // Expose panel control globally
   window.openRecordingPanel = openPanel;
+  
+  console.log('RecordingPanel mounted - waiting for user to open panel');
 });
 
 onUnmounted(() => {

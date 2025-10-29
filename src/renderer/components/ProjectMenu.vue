@@ -34,9 +34,12 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { useProjectStore } from '../stores/projectStore';
-import { useTimelineStore } from '../stores/timelineStore';
-import { useMediaStore } from '../stores/mediaStore';
+import { useClipForgeProjectStore } from '../stores/clipforge/projectStore';
+import { useAudioForgeProjectStore } from '../stores/audioforge/projectStore';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
+import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
+import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
 import SaveProgressDialog from './SaveProgressDialog.vue';
 
 // Props
@@ -47,9 +50,17 @@ const props = defineProps({
   }
 });
 
-const projectStore = useProjectStore(props.appMode);
-const timelineStore = useTimelineStore(props.appMode);
-const mediaStore = useMediaStore(props.appMode);
+const projectStore = props.appMode === 'clipforge' 
+  ? useClipForgeProjectStore() 
+  : useAudioForgeProjectStore();
+
+const timelineStore = props.appMode === 'clipforge' 
+  ? useClipForgeTimelineStore() 
+  : useAudioForgeTimelineStore();
+
+const mediaStore = props.appMode === 'clipforge' 
+  ? useClipForgeMediaStore() 
+  : useAudioForgeMediaStore();
 
 const isSaving = ref(false);
 const showSaveProgress = ref(false);

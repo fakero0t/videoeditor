@@ -7,7 +7,7 @@
       </div>
       
       <div class="modal-body">
-        <div v-if="!hasScreenPermission" class="permission-item">
+        <div v-if="appMode === 'clipforge' && !hasScreenPermission" class="permission-item">
           <div class="permission-icon">🖥️</div>
           <div class="permission-info">
             <h4>Screen Recording Permission</h4>
@@ -34,13 +34,13 @@
                 </li>
                 
                 <li v-if="platform.isMac">
-                  Enable the checkbox next to ClipForge
+                  Enable the checkbox next to {{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }}
                 </li>
                 <li v-else-if="platform.isWindows">
-                  Enable ClipForge in the list
+                  Enable {{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }} in the list
                 </li>
                 
-                <li>Restart ClipForge</li>
+                <li>Restart {{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }}</li>
               </ol>
             </div>
           </div>
@@ -50,7 +50,7 @@
           <div class="permission-icon">🎤</div>
           <div class="permission-info">
             <h4>Microphone Permission</h4>
-            <p>ClipForge needs permission to record audio from your microphone.</p>
+            <p>{{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }} needs permission to record audio from your microphone.</p>
             
             <div class="instructions">
               <p><strong>To grant permission:</strong></p>
@@ -94,7 +94,11 @@ import { computed } from 'vue';
 const props = defineProps({
   isVisible: Boolean,
   hasScreenPermission: Boolean,
-  hasMicrophonePermission: Boolean
+  hasMicrophonePermission: Boolean,
+  appMode: {
+    type: String,
+    default: 'clipforge'
+  }
 });
 
 const emit = defineEmits(['close', 'recheck']);

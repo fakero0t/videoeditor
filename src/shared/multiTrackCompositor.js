@@ -53,15 +53,15 @@ class MultiTrackCompositor {
 
   /**
    * Get the primary (foreground) clip to display
-   * Priority: Track 2 > Track 1
+   * Priority: Topmost track (lowest index) > Lower tracks
    * @param {Array} activeClips - Array of active clips
    * @returns {Object} The clip to display in preview
    */
   getPrimaryClip(activeClips) {
     if (activeClips.length === 0) return null;
     
-    // Return the highest track's clip (last in sorted array)
-    return activeClips[activeClips.length - 1].clip;
+    // Return the topmost track's clip (first in sorted array, lowest track index)
+    return activeClips[0].clip;
   }
 
   /**
@@ -104,7 +104,8 @@ class MultiTrackCompositor {
     
     const video = document.createElement('video');
     video.src = clip.filePath;
-    video.muted = true;
+    video.muted = false; // Enable audio for playback
+    video.volume = 1.0; // Set full volume
     video.preload = 'metadata';
     video.style.display = 'none';
     document.body.appendChild(video);

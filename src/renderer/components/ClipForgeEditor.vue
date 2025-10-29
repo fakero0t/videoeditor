@@ -17,13 +17,13 @@
         <!-- Media Library (left panel) -->
         <aside class="media-library-panel">
           <MediaLibrary :app-mode="appMode" />
-          <TrimInfo />
+          <TrimInfo :app-mode="appMode" />
         </aside>
         
         <!-- Main editing area (center) -->
         <main class="main-editor">
           <div class="preview-window">
-            <PreviewWindow />
+            <PreviewWindow :app-mode="appMode" />
           </div>
           
           <div class="timeline-container">
@@ -31,7 +31,7 @@
           </div>
           
           <div class="transport-controls">
-            <TransportControls />
+            <TransportControls :app-mode="appMode" />
             <div class="toolbar-buttons">
               <SplitButton />
             </div>
@@ -60,11 +60,11 @@ import SplitButton from './SplitButton.vue';
 import ProjectMenu from './ProjectMenu.vue';
 import RecordingPanel from './RecordingPanel.vue';
 import ExportDialog from './ExportDialog.vue';
-import { useProjectStore } from '../stores/projectStore';
-import { useRecordingStore } from '../stores/recordingStore';
-import { useTimelineStore } from '../stores/timelineStore';
-import { useMediaStore } from '../stores/mediaStore';
-import { PlaybackManager } from '../../shared/playbackManager';
+import { useClipForgeProjectStore } from '../stores/clipforge/projectStore';
+import { useClipForgeRecordingStore } from '../stores/clipforge/recordingStore';
+import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
+import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
+import { ClipForgePlaybackManager } from '../../shared/clipforge/playbackManager';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
 
 // Props
@@ -80,17 +80,17 @@ defineEmits(['back']);
 
 const appVersion = ref('');
 
-const projectStore = useProjectStore(props.appMode);
-const recordingStore = useRecordingStore(props.appMode);
-const timelineStore = useTimelineStore(props.appMode);
-const mediaStore = useMediaStore(props.appMode);
+const projectStore = useClipForgeProjectStore();
+const recordingStore = useClipForgeRecordingStore();
+const timelineStore = useClipForgeTimelineStore();
+const mediaStore = useClipForgeMediaStore();
 
 const showExport = ref(false);
 const videoPlayerPool = new VideoPlayerPool();
 let playbackManager = null;
 
 // Make project store globally available for timeline store
-window[`__projectStore_${props.appMode}`] = projectStore;
+window.__clipforgeProjectStore = projectStore;
 
 // Computed property for export button - disabled during save/recording/empty timeline
 const canExport = computed(() => {
@@ -132,7 +132,7 @@ window.addEventListener('beforeunload', (e) => {
 
 onMounted(async () => {
   // Initialize playback manager
-  playbackManager = new PlaybackManager(timelineStore, videoPlayerPool);
+  playbackManager = new ClipForgePlaybackManager(timelineStore, videoPlayerPool);
   
   // Update window title
   document.title = 'Forge - ClipForge';

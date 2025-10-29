@@ -1,14 +1,14 @@
-export class ProjectService {
+export class ClipForgeProjectService {
   constructor() {
     this.currentProjectPath = null;
     this.currentProjectName = null;
   }
 
   // Serialize entire project
-  serializeProject(projectName, timelineData, mediaData, appType = 'clipforge') {
+  serializeProject(projectName, timelineData, mediaData) {
     return {
       version: "2.0",
-      appType: appType,
+      appType: 'clipforge',
       projectName: projectName,
       created: new Date().toISOString(),
       modified: new Date().toISOString(),
@@ -18,7 +18,7 @@ export class ProjectService {
   }
 
   // Save project to disk (without file copying - that's in main process)
-  async prepareProjectForSave(projectPath, timelineStore, mediaStore, appType = 'clipforge') {
+  async prepareProjectForSave(projectPath, timelineStore, mediaStore) {
     // Extract project name from path (remove .cfproj extension)
     const projectName = projectPath.split('/').pop().replace('.cfproj', '');
 
@@ -50,7 +50,7 @@ export class ProjectService {
     });
 
     // Create project JSON
-    const projectData = this.serializeProject(projectName, timelineData, mediaData, appType);
+    const projectData = this.serializeProject(projectName, timelineData, mediaData);
 
     // Extract file list for copying
     const filesToCopy = mediaData.map(file => ({
@@ -77,11 +77,12 @@ export class ProjectService {
   }
 
   // Load project from disk
-  async loadProject(projectPath, projectData, timelineStore, mediaStore, expectedAppType = 'clipforge') {
+  async loadProject(projectPath, projectData, timelineStore, mediaStore) {
     // Validate app type
-    if (projectData.appType && projectData.appType !== expectedAppType) {
-      throw new Error(`This project was created in ${projectData.appType} and cannot be opened in ${expectedAppType}`);
+    if (projectData.appType && projectData.appType !== 'clipforge') {
+      throw new Error(`This project was created in ${projectData.appType} and cannot be opened in ClipForge`);
     }
+    
     // Extract project folder and name from path
     const pathParts = projectPath.split('/');
     const projectName = pathParts.pop().replace('.cfproj', '');
