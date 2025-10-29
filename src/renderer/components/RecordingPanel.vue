@@ -490,12 +490,58 @@ const openPanel = async () => {
     // Force a permission recheck after sources are loaded
     await checkPermissionsSilently();
     
+    // Proactively check if we need to prompt for permissions
+    if (props.appMode === 'clipforge') {
+      // Check if we have screen recording permission
+      const hasScreenSources = recordingStore.availableScreenSources?.length > 0;
+      
+      if (!hasScreenSources || !recordingStore.hasScreenPermission) {
+        // No sources or no permission - show permission prompt
+        console.log('[RecordingPanel] Screen recording permission needed, showing prompt');
+        
+        const result = await window.electronAPI.showMessageBox({
+          type: 'warning',
+          title: 'Screen Recording Permission Required',
+          message: 'Forge needs permission to record your screen.',
+          detail: 'Please grant screen recording permission in System Preferences to use this feature.',
+          buttons: ['Open System Preferences', 'Cancel'],
+          defaultId: 0
+        });
+        
+        if (result.response === 0) {
+          // User chose to open settings
+          await window.electronAPI.recording.openSystemSettings();
+          
+          // Wait a bit and then recheck
+          setTimeout(async () => {
+            await refreshSources();
+            await checkPermissionsSilently();
+            
+            // Check if permission was granted
+            if (recordingStore.availableScreenSources?.length > 0) {
+              await window.electronAPI.showMessageBox({
+                type: 'info',
+                title: 'Permission Granted',
+                message: 'Screen recording permission has been granted successfully!',
+                buttons: ['OK']
+              });
+            }
+          }, 3000);
+        }
+      }
+    }
+    
     // Set up focus listener only once
     if (!window._recordingPanelInitialized) {
-      const handleFocus = () => {
+      const handleFocus = async () => {
         // Silently check permissions when user returns to app
         // This updates the UI without showing the modal
-        checkPermissionsSilently();
+        await checkPermissionsSilently();
+        
+        // If sources appear after returning, user granted permission
+        if (props.appMode === 'clipforge' && recordingStore.availableScreenSources?.length > 0) {
+          console.log('[RecordingPanel] Sources now available - permission was granted');
+        }
       };
       
       window.addEventListener('focus', handleFocus);
@@ -509,6 +555,11 @@ const openPanel = async () => {
   } else {
     // Just do a silent permission check if already initialized
     await checkPermissionsSilently();
+    
+    // Also check if we still need to prompt for permissions
+    if (props.appMode === 'clipforge' && recordingStore.availableScreenSources?.length === 0) {
+      console.log('[RecordingPanel] No sources available - may need permission');
+    }
   }
 };
 
@@ -740,7 +791,7 @@ const refreshSources = async () => {
     
   } catch (error) {
     console.error('Failed to refresh sources:', error);
-    recordingStore.setError('Failed to list recording sources');
+    recordingStore.setLastError('Failed to list recording sources');
   }
 };
 
@@ -764,6 +815,20 @@ const selectWebcamSource = (cam) => {
 // Recording controls
 const startRecording = async () => {
   try {
+    // Clear previous errors
+    recordingStore.setLastError(null);
+    
+    // Validate source is selected
+    if (!recordingStore.selectedScreenSource) {
+      await window.electronAPI.showMessageBox({
+        type: 'warning',
+        title: 'No Source Selected',
+        message: 'Please select a screen or window to record before starting.',
+        buttons: ['OK']
+      });
+      return;
+    }
+    
     // Force a fresh permission check before recording
     await checkPermissionsSilently();
     
@@ -803,26 +868,28 @@ const startRecording = async () => {
           minimizePanel();
         },
         onProgress: (duration) => {
-          recordingStore.updateDuration(duration);
+          // Duration is tracked automatically by recordingStore timer
         },
         onAudioLevel: (level) => {
-          recordingStore.updateAudioLevel(level);
+          recordingStore.setAudioLevel(level);
         },
         onComplete: async (filePath) => {
           await handleRecordingComplete(filePath);
         },
         onError: async (error) => {
           console.error('Recording error:', error);
-          recordingStore.setError(error.message);
+          recordingStore.setLastError(error.message);
           recordingStore.stopRecording();
           await window.electronAPI.recording.setRecordingState(false);
+          await showRecordingError(error);
         }
       }
     );
     
   } catch (error) {
     console.error('Failed to start recording:', error);
-    recordingStore.setError(error.message);
+    recordingStore.setLastError(error.message);
+    await showRecordingError(error);
   }
 };
 
@@ -841,7 +908,7 @@ const stopRecording = async () => {
     isPanelOpen.value = true;
     
     // Show success popup
-    await window.electronAPI.dialog.showMessageBox({
+    await window.electronAPI.showMessageBox({
       type: 'info',
       title: 'Recording Complete',
       message: 'Screen recording was successful!',
@@ -853,7 +920,7 @@ const stopRecording = async () => {
     
   } catch (error) {
     console.error('Failed to stop recording:', error);
-    recordingStore.setError(error.message);
+    recordingStore.setLastError(error.message);
     
     // Force stop even if there was an error
     recordingStore.stopRecording();
@@ -864,28 +931,39 @@ const stopRecording = async () => {
 };
 
 const handleRecordingComplete = async (filePath) => {
+  console.log('[RecordingPanel] handleRecordingComplete called with path:', filePath);
+  
   try {
     // Convert to MP4 (or keep WebM if conversion fails)
     let finalPath = filePath;
     
+    console.log('[RecordingPanel] Starting MP4 conversion...');
     try {
       const mp4Path = await window.electronAPI.ffmpeg.convertWebMToMP4(filePath);
       finalPath = mp4Path;
+      console.log('[RecordingPanel] MP4 conversion successful:', mp4Path);
       
       // Delete WebM after successful conversion
       await window.electronAPI.fileSystem.deleteFile(filePath);
+      console.log('[RecordingPanel] WebM file deleted');
     } catch (conversionError) {
-      console.warn('MP4 conversion failed, using WebM:', conversionError);
+      console.warn('[RecordingPanel] MP4 conversion failed, using WebM:', conversionError);
       // Keep WebM file
     }
     
     // Import to media library
+    console.log('[RecordingPanel] Getting video info for:', finalPath);
     const videoInfo = await window.electronAPI.ffmpeg.getVideoInfo(finalPath);
+    console.log('[RecordingPanel] Video info:', videoInfo);
+    
+    console.log('[RecordingPanel] Generating thumbnail...');
     const thumbnail = await window.electronAPI.ffmpeg.generateThumbnail(finalPath, 1);
+    console.log('[RecordingPanel] Thumbnail generated:', thumbnail);
     
     // Extract filename from path
     const fileName = finalPath.split('/').pop();
     
+    console.log('[RecordingPanel] Adding to media library...');
     mediaStore.addMediaFile({
       filePath: finalPath,
       fileName: fileName,
@@ -902,13 +980,29 @@ const handleRecordingComplete = async (filePath) => {
       isRecording: true // Mark as recording
     });
     
+    console.log('[RecordingPanel] Successfully added to media library!');
+    
     // Show success message
-    alert('Recording complete and added to media library!');
+    await window.electronAPI.showMessageBox({
+      type: 'info',
+      title: 'Recording Complete',
+      message: 'Your screen recording has been saved and added to the media library!',
+      buttons: ['OK']
+    });
     
   } catch (error) {
-    console.error('Failed to process recording:', error);
-    alert('Recording saved but import failed: ' + error.message);
+    console.error('[RecordingPanel] Failed to process recording:', error);
+    console.error('[RecordingPanel] Error stack:', error.stack);
+    
+    await window.electronAPI.showMessageBox({
+      type: 'error',
+      title: 'Import Failed',
+      message: 'Recording was saved but could not be imported to media library.',
+      detail: error.message,
+      buttons: ['OK']
+    });
   } finally {
+    console.log('[RecordingPanel] Cleaning up recording state...');
     recordingStore.stopRecording();
     await window.electronAPI.recording.setRecordingState(false);
     isWidgetVisible.value = false;
@@ -920,6 +1014,58 @@ const getAudioLevelColor = (level) => {
   if (level > 80) return '#ff4444';
   if (level > 60) return '#ffaa00';
   return '#00ff00';
+};
+
+// User-friendly error handling
+const showRecordingError = async (error) => {
+  let title = 'Recording Error';
+  let message = error.message || 'An unexpected error occurred while recording.';
+  let showSettingsButton = false;
+  
+  // Parse error type and customize message
+  if (error.message.includes('permission') || error.name === 'NotAllowedError') {
+    title = 'Screen Recording Permission Required';
+    message = 'Please grant screen recording permission in System Preferences to record your screen.';
+    showSettingsButton = true;
+  } else if (error.message.includes('Invalid source') || error.message.includes('source ID')) {
+    title = 'Invalid Screen Source';
+    message = 'The selected source cannot be recorded. Please try selecting a different screen or window.';
+  } else if (error.message.includes('NotFoundError') || error.message.includes('no longer available')) {
+    title = 'Screen Source Not Available';
+    message = 'The selected window or screen is no longer available. Please select another source.';
+  } else if (error.name === 'NotReadableError') {
+    title = 'Screen Capture In Use';
+    message = 'Unable to access screen recording. Another application may be using it. Close other recording apps and try again.';
+  } else if (error.message.includes('Failed to capture screen')) {
+    title = 'Screen Capture Failed';
+    message = error.message;
+  }
+  
+  // Show error dialog
+  await window.electronAPI.showMessageBox({
+    type: 'error',
+    title: title,
+    message: message,
+    buttons: ['OK'],
+    defaultId: 0
+  });
+  
+  // Offer to open system settings for permission errors
+  if (showSettingsButton) {
+    const result = await window.electronAPI.showMessageBox({
+      type: 'question',
+      title: 'Open System Preferences?',
+      message: 'Would you like to open System Preferences to grant screen recording permission?',
+      buttons: ['Open Settings', 'Cancel'],
+      defaultId: 0
+    });
+    
+    if (result.response === 0) {
+      await window.electronAPI.recording.openSystemSettings();
+      // Recheck permissions after user returns
+      setTimeout(() => checkPermissionsSilently(), 2000);
+    }
+  }
 };
 
 // Audio sync testing (for debugging)
@@ -965,7 +1111,7 @@ const startWebcamPreview = async () => {
     }
   } catch (error) {
     console.error('Failed to start webcam preview:', error);
-    recordingStore.setError('Failed to access webcam');
+    recordingStore.setLastError('Failed to access webcam');
   }
 };
 
@@ -1016,26 +1162,27 @@ const startWebcamRecording = async () => {
           minimizePanel();
         },
         onProgress: (duration) => {
-          recordingStore.updateDuration(duration);
+          // Duration is tracked automatically by recordingStore timer
         },
         onAudioLevel: (level) => {
-          recordingStore.updateAudioLevel(level);
+          recordingStore.setAudioLevel(level);
         },
         onComplete: async (filePath) => {
           await handleRecordingComplete(filePath);
         },
         onError: async (error) => {
           console.error('Recording error:', error);
-          recordingStore.setError(error.message);
+          recordingStore.setLastError(error.message);
           recordingStore.stopRecording();
           await window.electronAPI.recording.setRecordingState(false);
+          await showRecordingError(error);
         }
       }
     );
     
   } catch (error) {
     console.error('Failed to start webcam recording:', error);
-    recordingStore.setError(error.message);
+    recordingStore.setLastError(error.message);
   }
 };
 
@@ -1072,26 +1219,27 @@ const startMicrophoneRecording = async () => {
           minimizePanel();
         },
         onProgress: (duration) => {
-          recordingStore.updateDuration(duration);
+          // Duration is tracked automatically by recordingStore timer
         },
         onAudioLevel: (level) => {
-          recordingStore.updateAudioLevel(level);
+          recordingStore.setAudioLevel(level);
         },
         onComplete: async (filePath) => {
           await handleRecordingComplete(filePath);
         },
         onError: async (error) => {
           console.error('Recording error:', error);
-          recordingStore.setError(error.message);
+          recordingStore.setLastError(error.message);
           recordingStore.stopRecording();
           await window.electronAPI.recording.setRecordingState(false);
+          await showRecordingError(error);
         }
       }
     );
     
   } catch (error) {
     console.error('Failed to start microphone recording:', error);
-    recordingStore.setError(error.message);
+    recordingStore.setLastError(error.message);
   }
 };
 
@@ -1171,9 +1319,16 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  console.log('[RecordingPanel] Component unmounting, cleaning up...');
+  
+  // Stop webcam preview
   stopWebcamPreview();
-  screenRecorder.cleanup();
-  screenRecorder.cleanupAudioMonitoring();
+  
+  // Clean up screen recorder
+  if (screenRecorder) {
+    screenRecorder.cleanup();
+    screenRecorder.cleanupAudioMonitoring();
+  }
   
   // Cleanup focus listener
   if (window._recordingPanelCleanup) {
@@ -1182,6 +1337,8 @@ onUnmounted(() => {
   
   // Reset initialization flag
   window._recordingPanelInitialized = false;
+  
+  console.log('[RecordingPanel] Cleanup complete');
 });
 
 // Watch for limit reached
@@ -1229,7 +1386,7 @@ watch(() => recordingStore.selectedMicrophoneSource, async (newMicrophone) => {
       );
     } catch (error) {
       console.error('Failed to setup audio monitoring:', error);
-      recordingStore.setError('Failed to access microphone');
+      recordingStore.setLastError('Failed to access microphone');
     }
   } else {
     // Clean up audio monitoring when no microphone selected
