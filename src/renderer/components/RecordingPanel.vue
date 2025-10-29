@@ -30,8 +30,6 @@
         @click="currentTab = 'composite'" 
         :class="{ active: currentTab === 'composite' }"
         class="tab-btn"
-        disabled
-        title="Coming in PR #25"
       >
         🎬 Screen + Webcam
       </button>
@@ -301,6 +299,187 @@
       </div>
     </div>
     
+    <!-- Composite Recording Tab -->
+    <div v-if="currentTab === 'composite'" class="tab-content">
+      <div class="source-selection">
+        <label>Screen Source:</label>
+        <div class="source-list-container">
+          <div class="source-list-header">
+            <span class="source-count">{{ recordingStore.availableScreenSources?.length || 0 }} sources</span>
+            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+              Refresh
+            </button>
+          </div>
+          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
+            <div 
+              v-if="recordingStore.availableScreenSources.length === 0"
+              class="no-sources"
+            >
+              No sources available
+            </div>
+            <div 
+              v-for="source in (recordingStore.availableScreenSources || [])" 
+              :key="source.id"
+              @click="selectCompositeScreenSource(source)"
+              :class="{ 
+                'source-item': true, 
+                'selected': compositeScreenSource?.id === source.id,
+                'disabled': recordingStore.isRecording
+              }"
+            >
+              <div class="source-icon">
+                <span v-if="source.type === 'screen'">🖥️</span>
+                <span v-else-if="source.type === 'window'">🪟</span>
+                <span v-else>📄</span>
+              </div>
+              <div class="source-info">
+                <div class="source-name">{{ source.name }}</div>
+                <div class="source-type">{{ source.type }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-if="compositeScreenSource" class="preview-container">
+        <img 
+          :src="compositeScreenSource.thumbnail" 
+          alt="Screen Preview"
+          class="source-preview"
+        />
+      </div>
+      
+      <div class="source-selection">
+        <label>Webcam:</label>
+        <div class="source-list-container">
+          <div class="source-list-header">
+            <span class="source-count">{{ recordingStore.availableWebcamSources.length }} webcams</span>
+            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+              Refresh
+            </button>
+          </div>
+          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
+            <div 
+              v-if="recordingStore.availableWebcamSources.length === 0"
+              class="no-sources"
+            >
+              No webcams available
+            </div>
+            <div 
+              v-for="cam in recordingStore.availableWebcamSources" 
+              :key="cam.deviceId"
+              @click="selectCompositeWebcamSource(cam)"
+              :class="{ 
+                'source-item': true, 
+                'selected': compositeWebcamSource?.deviceId === cam.deviceId,
+                'disabled': recordingStore.isRecording
+              }"
+            >
+              <div class="source-icon">
+                <span>📹</span>
+              </div>
+              <div class="source-info">
+                <div class="source-name">{{ cam.label }}</div>
+                <div class="source-type">webcam</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div v-if="compositeWebcamSource" class="preview-container">
+        <video 
+          ref="compositeWebcamPreview"
+          autoplay
+          muted
+          class="webcam-preview"
+        ></video>
+      </div>
+      
+      <div class="recording-options">
+        <div class="option-group">
+          <label>Microphone:</label>
+          <select 
+            v-model="recordingStore.selectedMicrophoneSource"
+            :disabled="recordingStore.isRecording"
+          >
+            <option :value="null">None</option>
+            <option 
+              v-for="mic in recordingStore.availableMicrophoneSources"
+              :key="mic.deviceId"
+              :value="mic"
+            >
+              {{ mic.label }}
+            </option>
+          </select>
+        </div>
+        
+        <div v-if="recordingStore.selectedMicrophoneSource" class="option-group">
+          <label>Audio Level:</label>
+          <div class="audio-level-meter">
+            <div 
+              class="audio-level-bar" 
+              :style="{ width: recordingStore.audioLevel + '%', backgroundColor: getAudioLevelColor(recordingStore.audioLevel) }"
+            ></div>
+          </div>
+          <span class="audio-level-text">{{ Math.round(recordingStore.audioLevel) }}%</span>
+        </div>
+        
+        <div class="option-group">
+          <label>Screen Quality:</label>
+          <select 
+            v-model="recordingStore.recordingQuality"
+            :disabled="recordingStore.isRecording"
+          >
+            <option value="high">High (1080p)</option>
+            <option value="medium">Medium (720p)</option>
+            <option value="low">Low (480p)</option>
+          </select>
+          <small style="display: block; margin-top: 2px; font-size: 10px; color: #666;">
+            Webcam: Fixed 720p
+          </small>
+        </div>
+      </div>
+      
+      <div v-if="recordingStore.diskSpaceWarning" class="warning-message">
+        ⚠️ Low disk space (< 5GB available). Recording may fail.
+      </div>
+      
+      <div v-if="!compositeScreenSource || !compositeWebcamSource" class="warning-message">
+        ℹ️ Select both screen source and webcam to enable recording.
+      </div>
+      
+      <div v-if="recordingStore.selectedMicrophoneSource && !recordingStore.hasMicrophonePermission" class="warning-message">
+        ⚠️ Microphone permission required for audio recording.
+      </div>
+      
+      <div class="recording-controls">
+        <button 
+          v-if="!recordingStore.isRecording"
+          @click="startCompositeRecording"
+          :disabled="!canRecordComposite"
+          class="record-btn"
+        >
+          ● Start Recording
+        </button>
+        <button 
+          v-else
+          @click="stopRecording"
+          class="stop-btn"
+        >
+          ■ Stop Recording
+        </button>
+        
+        <button 
+          v-if="!recordingStore.permissionsChecked"
+          @click="showPermissionCheck"
+          class="secondary-btn"
+        >
+          Check Permissions
+        </button>
+      </div>
+    </div>
+    
     <!-- Microphone Only Recording Tab (AudioForge) -->
     <div v-if="currentTab === 'microphone'" class="tab-content">
       <div class="recording-options">
@@ -435,6 +614,12 @@ const showPermissionModal = ref(false);
 const webcamPreview = ref(null);
 let previewStream = null;
 
+// Composite recording state (separate from main screen/webcam sources)
+const compositeScreenSource = ref(null);
+const compositeWebcamSource = ref(null);
+const compositeWebcamPreview = ref(null);
+let compositeWebcamStream = null;
+
 const screenRecorder = new ScreenRecorder();
 
 // Panel dragging
@@ -460,6 +645,15 @@ const canRecordMicrophone = computed(() => {
   return !recordingStore.isRecording &&
          recordingStore.selectedMicrophoneSource !== null &&
          recordingStore.hasMicrophonePermission &&
+         recordingStore.hasEnoughDiskSpace;
+});
+
+// Computed property for composite recording
+const canRecordComposite = computed(() => {
+  return !recordingStore.isRecording &&
+         compositeScreenSource.value !== null &&
+         compositeWebcamSource.value !== null &&
+         recordingStore.hasRequiredPermissions &&
          recordingStore.hasEnoughDiskSpace;
 });
 
@@ -812,6 +1006,19 @@ const selectWebcamSource = (cam) => {
   startWebcamPreview();
 };
 
+// Select screen source for composite
+const selectCompositeScreenSource = (source) => {
+  if (recordingStore.isRecording) return;
+  compositeScreenSource.value = source;
+};
+
+// Select webcam source for composite
+const selectCompositeWebcamSource = (cam) => {
+  if (recordingStore.isRecording) return;
+  compositeWebcamSource.value = cam;
+  startCompositeWebcamPreview();
+};
+
 // Recording controls
 const startRecording = async () => {
   try {
@@ -863,7 +1070,9 @@ const startRecording = async () => {
       recordingStore.recordingQuality,
       {
         onStart: () => {
-          recordingStore.startRecording('screen', recordingId);
+          recordingStore.setRecordingType('screen');
+          recordingStore.currentRecordingId = recordingId;
+          recordingStore.startRecording();
           // Auto-minimize panel
           minimizePanel();
         },
@@ -1125,6 +1334,44 @@ const stopWebcamPreview = () => {
   }
 };
 
+// Start webcam preview for composite tab
+const startCompositeWebcamPreview = async () => {
+  // Stop existing preview
+  stopCompositeWebcamPreview();
+  
+  if (!compositeWebcamSource.value) return;
+  
+  try {
+    // Fixed 720p for webcam
+    compositeWebcamStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        deviceId: compositeWebcamSource.value.deviceId,
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    });
+    
+    if (compositeWebcamPreview.value) {
+      compositeWebcamPreview.value.srcObject = compositeWebcamStream;
+    }
+  } catch (error) {
+    console.error('Failed to start composite webcam preview:', error);
+    recordingStore.setLastError('Failed to access webcam');
+  }
+};
+
+// Stop webcam preview for composite tab
+const stopCompositeWebcamPreview = () => {
+  if (compositeWebcamStream) {
+    compositeWebcamStream.getTracks().forEach(track => track.stop());
+    compositeWebcamStream = null;
+  }
+  if (compositeWebcamPreview.value) {
+    compositeWebcamPreview.value.srcObject = null;
+  }
+};
+
 const startWebcamRecording = async () => {
   try {
     // Stop preview before recording
@@ -1158,7 +1405,9 @@ const startWebcamRecording = async () => {
       recordingStore.recordingQuality,
       {
         onStart: () => {
-          recordingStore.startRecording('webcam', recordingId);
+          recordingStore.setRecordingType('webcam');
+          recordingStore.currentRecordingId = recordingId;
+          recordingStore.startRecording();
           minimizePanel();
         },
         onProgress: (duration) => {
@@ -1215,7 +1464,9 @@ const startMicrophoneRecording = async () => {
       recordingStore.recordingQuality,
       {
         onStart: () => {
-          recordingStore.startRecording('microphone', recordingId);
+          recordingStore.setRecordingType('microphone');
+          recordingStore.currentRecordingId = recordingId;
+          recordingStore.startRecording();
           minimizePanel();
         },
         onProgress: (duration) => {
@@ -1240,6 +1491,92 @@ const startMicrophoneRecording = async () => {
   } catch (error) {
     console.error('Failed to start microphone recording:', error);
     recordingStore.setLastError(error.message);
+  }
+};
+
+// Start composite recording
+const startCompositeRecording = async () => {
+  try {
+    // Clear previous errors
+    recordingStore.setLastError(null);
+    
+    // Stop preview before recording
+    stopCompositeWebcamPreview();
+    
+    // Validate sources
+    if (!compositeScreenSource.value || !compositeWebcamSource.value) {
+      await window.electronAPI.showMessageBox({
+        type: 'warning',
+        title: 'Sources Required',
+        message: 'Please select both a screen source and webcam before starting.',
+        buttons: ['OK']
+      });
+      return;
+    }
+    
+    // Force a fresh permission check
+    await checkPermissionsSilently();
+    
+    // Check permissions
+    if (!recordingStore.hasScreenPermission) {
+      console.error('Screen permission not granted - cannot start recording');
+      showPermissionModal.value = true;
+      return;
+    }
+    
+    if (recordingStore.selectedMicrophoneSource && !recordingStore.hasMicrophonePermission) {
+      console.error('Microphone permission not granted - cannot start recording');
+      showPermissionModal.value = true;
+      return;
+    }
+    
+    // Check disk space
+    const diskSpace = await screenRecorder.checkDiskSpace();
+    if (diskSpace < 5 * 1024 * 1024 * 1024) {
+      alert('Insufficient disk space. Need at least 5GB available.');
+      return;
+    }
+    
+    // Notify main process
+    await window.electronAPI.recording.setRecordingState(true);
+    
+    // Start recording
+    const recordingId = 'rec_' + Date.now();
+    await screenRecorder.startCompositeRecording(
+      compositeScreenSource.value,
+      compositeWebcamSource.value,
+      recordingStore.selectedMicrophoneSource,
+      recordingStore.recordingQuality,
+      {
+        onStart: () => {
+          recordingStore.setRecordingType('composite');
+          recordingStore.currentRecordingId = recordingId;
+          recordingStore.startRecording();
+          minimizePanel();
+        },
+        onProgress: (duration) => {
+          // Duration tracked by recordingStore timer
+        },
+        onAudioLevel: (level) => {
+          recordingStore.setAudioLevel(level);
+        },
+        onComplete: async (filePath) => {
+          await handleRecordingComplete(filePath);
+        },
+        onError: async (error) => {
+          console.error('Composite recording error:', error);
+          recordingStore.setLastError(error.message);
+          recordingStore.stopRecording();
+          await window.electronAPI.recording.setRecordingState(false);
+          await showRecordingError(error);
+        }
+      }
+    );
+    
+  } catch (error) {
+    console.error('Failed to start composite recording:', error);
+    recordingStore.setLastError(error.message);
+    await showRecordingError(error);
   }
 };
 
@@ -1324,6 +1661,9 @@ onUnmounted(() => {
   // Stop webcam preview
   stopWebcamPreview();
   
+  // Stop composite webcam preview
+  stopCompositeWebcamPreview();
+  
   // Clean up screen recorder
   if (screenRecorder) {
     screenRecorder.cleanup();
@@ -1358,8 +1698,16 @@ watch(currentTab, async (newTab, oldTab) => {
     startWebcamPreview();
   }
   
+  // Handle composite tab
+  if (oldTab === 'composite') {
+    stopCompositeWebcamPreview();
+  }
+  if (newTab === 'composite' && compositeWebcamSource.value) {
+    startCompositeWebcamPreview();
+  }
+  
   // Clean up audio monitoring when switching away from recording tabs
-  if (oldTab === 'screen' || oldTab === 'webcam') {
+  if (oldTab === 'screen' || oldTab === 'webcam' || oldTab === 'composite') {
     screenRecorder.cleanupAudioMonitoring();
   }
   

@@ -125,8 +125,9 @@ class DragDropManager {
     
     targetTime = Math.max(0, targetTime);
     
-    // Validate track (must be within timeline)
-    if (targetTrackId < 1 || targetTrackId > this.timelineStore.tracks.length) {
+    // Validate track (must exist in timeline)
+    const targetTrack = this.timelineStore.tracks.find(t => t.id === targetTrackId);
+    if (!targetTrack) {
       this.cancelDrag();
       return;
     }
@@ -154,7 +155,7 @@ class DragDropManager {
     
     // Add clip to timeline
     this.timelineStore.addClipToTrack(
-      `track-${targetTrackId}`, 
+      targetTrackId, 
       this.dragState.draggedClip, 
       finalTime
     );
@@ -182,9 +183,7 @@ class DragDropManager {
       this.timelineStore.updateClipPosition(clip.id, finalTime);
     } else {
       // Moving between tracks
-      const fromTrackId = `track-${originalTrackId}`;
-      const toTrackId = `track-${targetTrackId}`;
-      this.timelineStore.moveClipBetweenTracks(clip.id, fromTrackId, toTrackId, finalTime);
+      this.timelineStore.moveClipBetweenTracks(clip.id, originalTrackId, targetTrackId, finalTime);
     }
     
     // Clear dragging flag
@@ -193,7 +192,7 @@ class DragDropManager {
 
   // Calculate which clips need to be pushed aside
   calculatePushAside(targetTime, targetTrackId, clipDuration) {
-    const track = this.timelineStore.tracks.find(t => t.id === `track-${targetTrackId}`);
+    const track = this.timelineStore.tracks.find(t => t.id === targetTrackId);
     if (!track) {
       this.dragState.affectedClips = [];
       return;
@@ -238,7 +237,7 @@ class DragDropManager {
 
   // Apply push-aside effects to timeline state
   applyPushAside(targetTime, targetTrackId, clipDuration, excludeClipId) {
-    const track = this.timelineStore.tracks.find(t => t.id === `track-${targetTrackId}`);
+    const track = this.timelineStore.tracks.find(t => t.id === targetTrackId);
     if (!track) return;
     
     const targetEndTime = targetTime + clipDuration;
@@ -262,7 +261,7 @@ class DragDropManager {
 
   // Resolve collision and return adjusted time
   resolveCollision(targetTime, targetTrackId, clipDuration, excludeClipId) {
-    const track = this.timelineStore.tracks.find(t => t.id === `track-${targetTrackId}`);
+    const track = this.timelineStore.tracks.find(t => t.id === targetTrackId);
     if (!track) return targetTime;
     
     // For now, allow exact positioning - don't auto-adjust for collisions
@@ -286,8 +285,14 @@ class DragDropManager {
   updateGhostPreview(time, trackId) {
     if (!this.dragState.ghostPreview) return;
     
-    const trackIndex = trackId - 1;
-    const trackY = trackIndex * 100;
+    const trackIndex = this.timelineStore.tracks.findIndex(t => t.id === trackId);
+    if (trackIndex === -1) return;
+    
+    // Calculate track Y position based on individual track heights
+    let trackY = 0;
+    for (let i = 0; i < trackIndex; i++) {
+      trackY += this.timelineStore.tracks[i].height;
+    }
     
     this.dragState.ghostPreview.x = time * this.timelineStore.pixelsPerSecond - this.timelineStore.scrollPosition;
     this.dragState.ghostPreview.y = trackY + 5;
@@ -344,8 +349,16 @@ class DragDropManager {
     ctx.lineWidth = 2;
     
     this.dragState.affectedClips.forEach(({ clip, newStartTime }) => {
-      const trackIndex = parseInt(clip.trackId.split('-')[1]) - 1;
-      const trackY = trackIndex * 100;
+      const trackIndex = this.timelineStore.tracks.findIndex(t => t.id === clip.trackId);
+      if (trackIndex === -1) return;
+      
+      // Calculate track Y position based on individual track heights
+      let trackY = 0;
+      for (let i = 0; i < trackIndex; i++) {
+        trackY += this.timelineStore.tracks[i].height;
+      }
+      
+      const track = this.timelineStore.tracks[trackIndex];
       const x = newStartTime * this.timelineStore.pixelsPerSecond - this.timelineStore.scrollPosition;
       const width = clip.duration * this.timelineStore.pixelsPerSecond;
       
@@ -353,7 +366,7 @@ class DragDropManager {
       if (x + width < 0 || x > ctx.canvas.width) return;
       
       // Draw outline showing where clip will be pushed to
-      ctx.strokeRect(x, trackY + 5, width, 90);
+      ctx.strokeRect(x, trackY + 5, width, track.height - 10);
     });
     
     ctx.restore();
@@ -368,7 +381,7 @@ class DragDropManager {
   snapToClipEdges(time, trackId, excludeClipId) {
     if (!this.snapEnabled) return { time, snapped: false };
     
-    const track = this.timelineStore.tracks.find(t => t.id === `track-${trackId}`);
+    const track = this.timelineStore.tracks.find(t => t.id === trackId);
     if (!track) return { time, snapped: false };
     
     const targetPixelX = time * this.timelineStore.pixelsPerSecond;
@@ -454,8 +467,18 @@ class DragDropManager {
 
   // Helper: Get track from Y coordinate
   getTrackFromY(y) {
-    const trackHeight = 100;
-    return Math.floor(y / trackHeight) + 1;
+    let currentY = 0;
+    for (let i = 0; i < this.timelineStore.tracks.length; i++) {
+      const track = this.timelineStore.tracks[i];
+      const trackHeight = track.height;
+      
+      if (y >= currentY && y <= currentY + trackHeight) {
+        return track.id; // Return actual track ID
+      }
+      currentY += trackHeight;
+    }
+    
+    return this.timelineStore.tracks[0]?.id || 'track-1'; // Default to first track if not found
   }
 
   // Helper: Get time from X coordinate
@@ -475,7 +498,7 @@ class DragDropManager {
   clearDragState() {
     // Reset isDragging property on the original clip in the timeline
     if (this.dragState.draggedClip && this.dragState.originalTrackId) {
-      const track = this.timelineStore.tracks.find(t => t.id === `track-${this.dragState.originalTrackId}`);
+      const track = this.timelineStore.tracks.find(t => t.id === this.dragState.originalTrackId);
       if (track) {
         const originalClip = track.clips.find(c => c.id === this.dragState.draggedClip.id);
         if (originalClip) {

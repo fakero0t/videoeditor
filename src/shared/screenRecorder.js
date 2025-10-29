@@ -1,3 +1,5 @@
+import { VideoCompositor } from './videoCompositor.js';
+
 // Diagnostic logging for screen recording
 class ScreenRecordingDiagnostics {
   logRecordingAttempt(source, options) {
@@ -829,8 +831,148 @@ export class ScreenRecorder {
     }
   }
 
+  // Start composite recording (screen + webcam PiP)
+  async startCompositeRecording(screenSource, webcamSource, microphoneSource, quality, callbacks) {
+    this.callbacks = callbacks;
+    
+    try {
+      console.log('[Composite] Starting composite recording');
+      console.log('[Composite] Screen source:', screenSource.name);
+      console.log('[Composite] Webcam source:', webcamSource.label);
+      
+      // Validate requirements
+      const validation = await this.validateRecordingRequirements(screenSource, microphoneSource);
+      if (!validation.valid) {
+        const errorMsg = 'Composite recording validation failed:\n• ' + validation.errors.join('\n• ');
+        throw new Error(errorMsg);
+      }
+      
+      // Get screen stream
+      const videoConstraints = this.getVideoConstraints(quality);
+      console.log('[Composite] Screen video constraints:', videoConstraints);
+      
+      const screenStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: screenSource.id
+          }
+        }
+      });
+      console.log('[Composite] Screen stream obtained');
+      
+      // Get webcam stream with fixed 720p
+      console.log('[Composite] Requesting webcam stream (fixed 720p)');
+      const webcamStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: webcamSource.deviceId,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      console.log('[Composite] Webcam stream obtained');
+      
+      // Create off-screen canvas for composition
+      const canvas = document.createElement('canvas');
+      canvas.width = videoConstraints.width.ideal;
+      canvas.height = videoConstraints.height.ideal;
+      console.log('[Composite] Canvas created:', canvas.width, 'x', canvas.height);
+      
+      // Initialize compositor
+      const compositor = new VideoCompositor();
+      compositor.init(canvas);
+      await compositor.setScreenStream(screenStream);
+      await compositor.setWebcamStream(webcamStream);
+      compositor.startComposition();
+      console.log('[Composite] Composition started');
+      
+      // Get composite stream from canvas
+      this.recordingStream = compositor.getCompositeStream();
+      console.log('[Composite] Composite stream created');
+      
+      // Store compositor for cleanup
+      this.compositor = compositor;
+      this.screenStream = screenStream;
+      this.webcamStream = webcamStream;
+      
+      // Get microphone stream if selected
+      if (microphoneSource) {
+        console.log('[Composite] Adding microphone audio');
+        this.audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: microphoneSource.deviceId,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        
+        // Add audio track to recording stream
+        const audioTrack = this.audioStream.getAudioTracks()[0];
+        this.recordingStream.addTrack(audioTrack);
+        
+        // Set up audio level monitoring
+        this.setupAudioLevelMonitoring();
+      }
+      
+      // Start recording
+      await this.startMediaRecorder(this.recordingStream);
+      
+      // Start duration tracking
+      this.startDurationTracking();
+      
+      // Start disk space monitoring
+      this.startDiskSpaceMonitoring((reason, available) => {
+        console.warn('Stopping composite recording:', reason);
+        this.stopRecording();
+      });
+      
+      // Set max duration timer
+      this.maxDurationTimer = setTimeout(() => {
+        console.log('Max duration reached');
+        this.stopRecording();
+      }, this.MAX_DURATION);
+      
+      console.log('[Composite] Recording started successfully');
+      
+      // Callback on start
+      if (this.callbacks.onStart) {
+        this.callbacks.onStart();
+      }
+      
+    } catch (error) {
+      console.error('[Composite] Failed to start composite recording:', error);
+      this.cleanup();
+      if (this.callbacks.onError) {
+        this.callbacks.onError(error);
+      }
+      throw error;
+    }
+  }
+
   cleanup() {
     console.log('[Recording] Starting cleanup...');
+    
+    // Stop compositor if active
+    if (this.compositor) {
+      console.log('[Recording] Cleaning up compositor');
+      this.compositor.cleanup();
+      this.compositor = null;
+    }
+    
+    // Stop screen stream (for composite)
+    if (this.screenStream) {
+      this.screenStream.getTracks().forEach(track => track.stop());
+      this.screenStream = null;
+    }
+    
+    // Stop webcam stream (for composite)
+    if (this.webcamStream) {
+      this.webcamStream.getTracks().forEach(track => track.stop());
+      this.webcamStream = null;
+    }
     
     // Stop all video/audio tracks
     if (this.recordingStream) {

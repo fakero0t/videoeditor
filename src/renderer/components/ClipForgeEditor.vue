@@ -13,20 +13,40 @@
     </div>
     
     <div class="app-content">
-      <div class="layout-grid">
+      <div class="layout-grid" :style="{ gridTemplateColumns: `${layoutStore.mediaLibraryWidthStyle} 4px 1fr` }">
         <!-- Media Library (left panel) -->
         <aside class="media-library-panel">
           <MediaLibrary :app-mode="appMode" />
           <TrimInfo :app-mode="appMode" />
         </aside>
         
+        <!-- Horizontal resize handle -->
+        <ResizeHandle 
+          direction="horizontal"
+          :min-size="layoutStore.minMediaLibraryWidth"
+          :max-size="layoutStore.maxMediaLibraryWidth"
+          tooltip="Drag to resize media library"
+          @resize="handleMediaLibraryResize"
+          @reset="resetMediaLibrarySize"
+        />
+        
         <!-- Main editing area (center) -->
         <main class="main-editor">
-          <div class="preview-window">
+          <div class="preview-window" :style="{ height: layoutStore.previewHeightStyle }">
             <PreviewWindow :app-mode="appMode" />
           </div>
           
-          <div class="timeline-container">
+          <!-- Vertical resize handle -->
+          <ResizeHandle 
+            direction="vertical"
+            :min-size="layoutStore.minPreviewHeight"
+            :max-size="layoutStore.maxPreviewHeight"
+            tooltip="Drag to resize preview window"
+            @resize="handlePreviewResize"
+            @reset="resetPreviewSize"
+          />
+          
+          <div class="timeline-container" :style="{ height: layoutStore.timelineHeightStyle }">
             <Timeline :app-mode="appMode" />
           </div>
           
@@ -60,10 +80,12 @@ import SplitButton from './SplitButton.vue';
 import ProjectMenu from './ProjectMenu.vue';
 import RecordingPanel from './RecordingPanel.vue';
 import ExportDialog from './ExportDialog.vue';
+import ResizeHandle from './ResizeHandle.vue';
 import { useClipForgeProjectStore } from '../stores/clipforge/projectStore';
 import { useClipForgeRecordingStore } from '../stores/clipforge/recordingStore';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
 import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
+import { useLayoutStore } from '../stores/layoutStore';
 import { ClipForgePlaybackManager } from '../../shared/clipforge/playbackManager';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
 
@@ -84,6 +106,7 @@ const projectStore = useClipForgeProjectStore();
 const recordingStore = useClipForgeRecordingStore();
 const timelineStore = useClipForgeTimelineStore();
 const mediaStore = useClipForgeMediaStore();
+const layoutStore = useLayoutStore();
 
 const showExport = ref(false);
 const videoPlayerPool = new VideoPlayerPool();
@@ -131,6 +154,9 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 onMounted(async () => {
+  // Initialize layout store
+  layoutStore.initialize();
+  
   // Initialize playback manager
   playbackManager = new ClipForgePlaybackManager(timelineStore, videoPlayerPool);
   
@@ -179,6 +205,23 @@ const openRecordingPanel = () => {
   if (window.openRecordingPanel) {
     window.openRecordingPanel();
   }
+};
+
+// Resize handlers
+const handleMediaLibraryResize = (event) => {
+  layoutStore.setMediaLibraryWidth(event.newSize);
+};
+
+const resetMediaLibrarySize = () => {
+  layoutStore.setMediaLibraryWidth(300);
+};
+
+const handlePreviewResize = (event) => {
+  layoutStore.setPreviewHeight(event.newSize);
+};
+
+const resetPreviewSize = () => {
+  layoutStore.setPreviewHeight(200);
 };
 </script>
 
@@ -235,7 +278,6 @@ body {
 
 .layout-grid {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
   height: 100%;
   gap: 2px;
 }
@@ -252,12 +294,12 @@ body {
   @include d3-window;
   padding: 2px;
   gap: 2px;
+  min-width: 0; /* Allow flex item to shrink below content size */
 }
 
 .preview-window {
-  flex: 1;
   background: #000;
-  min-height: 200px;
+  min-height: 100px;
   border: 1px solid;
   @include border-color-tl('content-border-left');
   @include border-color-rb('content-border-right');
@@ -265,7 +307,6 @@ body {
 }
 
 .timeline-container {
-  height: 200px;
   border: 1px solid;
   @include border-color-tl('content-border-left');
   @include border-color-rb('content-border-right');

@@ -11,9 +11,16 @@ class TrimHandleRenderer {
   drawTrimHandles(ctx, clip, trackIndex, isHovered = false, hoveredEdge = null) {
     const clipX = clip.startTime * this.timelineStore.pixelsPerSecond - this.timelineStore.scrollPosition;
     const clipWidth = clip.duration * this.timelineStore.pixelsPerSecond;
-    const trackY = trackIndex * 100;
+    
+    // Calculate track Y position based on individual track heights
+    let trackY = 0;
+    for (let i = 0; i < trackIndex; i++) {
+      trackY += this.timelineStore.tracks[i].height;
+    }
+    
+    const track = this.timelineStore.tracks[trackIndex];
     const clipY = trackY + 5;
-    const clipHeight = 90;
+    const clipHeight = track.height - 10;
     
     ctx.save();
     

@@ -66,7 +66,7 @@ const timeRuler = ref(null);
 const timelineContent = ref(null);
 
 const canvasWidth = computed(() => Math.max(800, timelineStore.timelineWidth));
-const canvasHeight = computed(() => 200); // 100px per track
+const canvasHeight = computed(() => timelineStore.totalHeight);
 
 let ctx = null;
 let timeRulerCtx = null;
@@ -166,21 +166,23 @@ const renderTimeline = () => {
   ctx.clearRect(0, 0, canvasWidth.value, canvasHeight.value);
   
   // Draw tracks
+  let currentY = 0;
   timelineStore.tracks.forEach((track, index) => {
-    const trackY = index * 100;
+    const trackY = currentY;
+    const trackHeight = track.height;
     
     // Track background
     ctx.fillStyle = index % 2 === 0 ? '#2a2a2a' : '#333333';
-    ctx.fillRect(0, trackY, canvasWidth.value, 100);
+    ctx.fillRect(0, trackY, canvasWidth.value, trackHeight);
     
     // Track border
     ctx.strokeStyle = '#555555';
     ctx.lineWidth = 1;
-    ctx.strokeRect(0, trackY, canvasWidth.value, 100);
+    ctx.strokeRect(0, trackY, canvasWidth.value, trackHeight);
     
     // Track indicator (colored stripe on left)
     ctx.fillStyle = index === 0 ? '#4a90e2' : '#e24a90';
-    ctx.fillRect(0, trackY, 5, 100);
+    ctx.fillRect(0, trackY, 5, trackHeight);
     
     // Track label
     ctx.fillStyle = '#ffffff';
@@ -189,7 +191,7 @@ const renderTimeline = () => {
     
     // Draw clips in this track
     track.clips.forEach(clip => {
-      drawClip(clip, trackY);
+      drawClip(clip, trackY, trackHeight);
       
       // Draw trim handles on all clips
       const isSelected = clipSelectionManager.isSelected(clip.id);
@@ -200,6 +202,8 @@ const renderTimeline = () => {
       const hoveredEdge = currentTrimState.value?.edge;
       trimHandleRenderer.drawTrimHandles(ctx, clip, index, isHovered, hoveredEdge);
     });
+    
+    currentY += trackHeight;
   });
   
   // Draw playhead
@@ -230,7 +234,7 @@ const renderTimeline = () => {
   drawSnapIndicator(ctx);
 };
 
-const drawClip = (clip, trackY) => {
+const drawClip = (clip, trackY, trackHeight) => {
   const x = clip.startTime * timelineStore.pixelsPerSecond - timelineStore.scrollPosition;
   const width = clip.duration * timelineStore.pixelsPerSecond;
   
@@ -250,8 +254,11 @@ const drawClip = (clip, trackY) => {
     fillColor = '#666666';
   }
   
+  const clipPadding = 5;
+  const clipHeight = trackHeight - (clipPadding * 2);
+  
   ctx.fillStyle = fillColor;
-  ctx.fillRect(x, trackY + 5, width, 90);
+  ctx.fillRect(x, trackY + clipPadding, width, clipHeight);
   
   // NEW: Add diagonal stripes for missing media
   if (isMissing) {
@@ -260,8 +267,8 @@ const drawClip = (clip, trackY) => {
     ctx.lineWidth = 2;
     for (let i = x; i < x + width; i += 10) {
       ctx.beginPath();
-      ctx.moveTo(i, trackY + 5);
-      ctx.lineTo(i + 10, trackY + 95);
+      ctx.moveTo(i, trackY + clipPadding);
+      ctx.lineTo(i + 10, trackY + trackHeight - clipPadding);
       ctx.stroke();
     }
     ctx.restore();
@@ -270,7 +277,7 @@ const drawClip = (clip, trackY) => {
   // Clip border
   ctx.strokeStyle = isMissing ? '#ff0000' : (isSelected ? '#ff4444' : '#2c5aa0');
   ctx.lineWidth = isSelected ? 3 : 2;
-  ctx.strokeRect(x, trackY + 5, width, 90);
+  ctx.strokeRect(x, trackY + clipPadding, width, clipHeight);
   
   // Clip label
   ctx.fillStyle = '#ffffff';
@@ -284,7 +291,7 @@ const drawClip = (clip, trackY) => {
   ctx.fillText(
     formatDuration(clip.duration), 
     x + 5, 
-    trackY + 95
+    trackY + trackHeight - 5
   );
 };
 
@@ -369,9 +376,15 @@ const drawSplitIndicator = (ctx) => {
     const trackIndex = timelineStore.tracks.findIndex(t => t.id === trackId);
     if (trackIndex === -1) return;
     
-    const trackY = trackIndex * 100;
+    // Calculate track Y position based on individual track heights
+    let trackY = 0;
+    for (let i = 0; i < trackIndex; i++) {
+      trackY += timelineStore.tracks[i].height;
+    }
+    
+    const track = timelineStore.tracks[trackIndex];
     const clipY = trackY + 5;
-    const clipHeight = 90;
+    const clipHeight = track.height - 10;
     
     // Draw split line
     ctx.strokeStyle = '#ffff00';
@@ -612,8 +625,22 @@ const handleMouseDown = (event) => {
       clipSelectionManager.selectClip(clickedClip.id, event.ctrlKey);
       
       // Start drag from timeline
-      const trackId = Math.floor(y / 100) + 1;
-      dragDropManager.startDragFromTimeline(clickedClip, trackId, event);
+      let trackId = null;
+      let currentY = 0;
+      for (let trackIndex = 0; trackIndex < timelineStore.tracks.length; trackIndex++) {
+        const track = timelineStore.tracks[trackIndex];
+        const trackHeight = track.height;
+        
+        if (y >= currentY && y <= currentY + trackHeight) {
+          trackId = track.id;
+          break;
+        }
+        currentY += trackHeight;
+      }
+      
+      if (trackId) {
+        dragDropManager.startDragFromTimeline(clickedClip, trackId, event);
+      }
     } else {
       // Clear selection if clicking empty space
       clipSelectionManager.clearSelection();
@@ -810,7 +837,21 @@ const handleDrop = (event) => {
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       
-      const targetTrackId = Math.floor(y / 100) + 1;
+      // Find which track the drop is targeting
+      let targetTrackId = null;
+      let currentY = 0;
+      for (let trackIndex = 0; trackIndex < timelineStore.tracks.length; trackIndex++) {
+        const track = timelineStore.tracks[trackIndex];
+        const trackHeight = track.height;
+        
+        if (y >= currentY && y <= currentY + trackHeight) {
+          targetTrackId = track.id;
+          break;
+        }
+        currentY += trackHeight;
+      }
+      
+      if (!targetTrackId) return; // No valid track found
       const targetTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
       
       // Validate target time before adding clip
@@ -820,7 +861,7 @@ const handleDrop = (event) => {
       }
       
       // Add clip to timeline
-      timelineStore.addClipToTrack(`track-${targetTrackId}`, data.clip, targetTime);
+      timelineStore.addClipToTrack(targetTrackId, data.clip, targetTime);
     }
   } catch (error) {
     console.error('Error handling drop:', error);
@@ -919,21 +960,28 @@ const handleKeyDown = (event) => {
 };
 
 const getClipAtPosition = (x, y) => {
-  const trackIndex = Math.floor(y / 100);
-  if (trackIndex < 0 || trackIndex >= timelineStore.tracks.length) return null;
-  
-  const track = timelineStore.tracks[trackIndex];
-  const trackY = trackIndex * 100;
-  
-  if (y < trackY + 5 || y > trackY + 95) return null;
-  
-  for (const clip of track.clips) {
-    const clipX = clip.startTime * timelineStore.pixelsPerSecond - timelineStore.scrollPosition;
-    const clipWidth = clip.duration * timelineStore.pixelsPerSecond;
+  let currentY = 0;
+  for (let trackIndex = 0; trackIndex < timelineStore.tracks.length; trackIndex++) {
+    const track = timelineStore.tracks[trackIndex];
+    const trackY = currentY;
+    const trackHeight = track.height;
     
-    if (x >= clipX && x <= clipX + clipWidth) {
-      return clip;
+    if (y >= trackY && y <= trackY + trackHeight) {
+      const clipPadding = 5;
+      if (y < trackY + clipPadding || y > trackY + trackHeight - clipPadding) return null;
+      
+      for (const clip of track.clips) {
+        const clipX = clip.startTime * timelineStore.pixelsPerSecond - timelineStore.scrollPosition;
+        const clipWidth = clip.duration * timelineStore.pixelsPerSecond;
+        
+        if (x >= clipX && x <= clipX + clipWidth) {
+          return clip;
+        }
+      }
+      return null;
     }
+    
+    currentY += trackHeight;
   }
   
   return null;
@@ -976,7 +1024,7 @@ watch(() => timelineStore.panMode, (newPanMode) => {
 .timeline-container {
   display: flex;
   flex-direction: column;
-  height: 200px;
+  height: 100%;
   @include d3-window;
   padding: 2px;
 }

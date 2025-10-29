@@ -18,22 +18,41 @@ class TrimManager {
 
   // Check if mouse is over a clip edge (for hover state)
   checkHoverState(mouseX, mouseY, selectedClipId = null) {
-    const trackHeight = 100;
-    const trackIndex = Math.floor(mouseY / trackHeight);
-    const trackId = `track-${trackIndex + 1}`;
+    // Find which track the mouse is over based on individual track heights
+    let trackIndex = -1;
+    let currentY = 0;
+    for (let i = 0; i < this.timelineStore.tracks.length; i++) {
+      const track = this.timelineStore.tracks[i];
+      const trackHeight = track.height;
+      
+      if (mouseY >= currentY && mouseY <= currentY + trackHeight) {
+        trackIndex = i;
+        break;
+      }
+      currentY += trackHeight;
+    }
     
-    const track = this.timelineStore.tracks.find(t => t.id === trackId);
-    if (!track) {
+    if (trackIndex === -1) {
       this.clearHoverState();
       return null;
     }
+    
+    const trackId = this.timelineStore.tracks[trackIndex].id;
+    const track = this.timelineStore.tracks[trackIndex];
     
     // Check all clips for hover state
     for (const clip of track.clips) {
       const clipX = clip.startTime * this.timelineStore.pixelsPerSecond - this.timelineStore.scrollPosition;
       const clipWidth = clip.duration * this.timelineStore.pixelsPerSecond;
-      const clipY = trackIndex * trackHeight + 5;
-      const clipHeight = 90;
+      
+      // Calculate track Y position based on individual track heights
+      let trackY = 0;
+      for (let i = 0; i < trackIndex; i++) {
+        trackY += this.timelineStore.tracks[i].height;
+      }
+      
+      const clipY = trackY + 5;
+      const clipHeight = track.height - 10;
       
       // Check if mouse is within clip bounds
       const withinClip = mouseX >= clipX && 
