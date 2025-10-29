@@ -12,8 +12,8 @@ prs/
 .env.test
 .env.production
 dist-electron/
-.dist/
-.build/
+dist/
+dist-build/
 .release/
 .release-builds/
 .release-builds-mac/

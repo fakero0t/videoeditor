@@ -76,6 +76,9 @@ const createWindow = () => {
 app.whenReady().then(async () => {
   createWindow();
   
+  // Wait for FFmpeg handler to initialize
+  await ffmpegHandler.initialize();
+  
   // Test FFmpeg on startup
   const ffmpegWorking = await ffmpegHandler.testFFmpeg();
   console.log('FFmpeg status:', ffmpegWorking ? 'Working' : 'Failed');

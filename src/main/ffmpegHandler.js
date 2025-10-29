@@ -1,6 +1,4 @@
 import ffmpeg from 'fluent-ffmpeg';
-import ffmpegStatic from 'ffmpeg-static';
-import ffprobeStatic from 'ffprobe-static';
 import { app } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -14,20 +12,54 @@ class FFmpegHandler {
     this.currentOperation = null;
     this.progressCallback = null;
     this.thumbnailCache = new ThumbnailCache();
+    this.initialized = false;
     
-    this.setupFFmpegPaths();
+    // Initialize FFmpeg paths asynchronously
+    this.initialize();
   }
 
-  setupFFmpegPaths() {
-    // Get bundled FFmpeg binary paths
-    const ffmpegPath = ffmpegStatic.replace('app.asar', 'app.asar.unpacked');
-    const ffprobePath = ffprobeStatic.path.replace('app.asar', 'app.asar.unpacked');
+  async initialize() {
+    await this.setupFFmpegPaths();
+    this.initialized = true;
+  }
+
+  async setupFFmpegPaths() {
+    let ffmpegPath, ffprobePath;
     
-    ffmpeg.setFfmpegPath(ffmpegPath);
-    ffmpeg.setFfprobePath(ffprobePath);
+    if (app.isPackaged) {
+      // In packaged app, use extraResources paths
+      const resourcesPath = process.resourcesPath;
+      ffmpegPath = path.join(resourcesPath, 'ffmpeg-static', 'ffmpeg');
+      ffprobePath = path.join(resourcesPath, 'ffprobe-static', 'bin', 'darwin', 'arm64', 'ffprobe');
+    } else {
+      // In development, dynamically import the modules
+      try {
+        const ffmpegStatic = await import('ffmpeg-static');
+        const ffprobeStatic = await import('ffprobe-static');
+        ffmpegPath = ffmpegStatic.default;
+        ffprobePath = ffprobeStatic.default.path;
+      } catch (error) {
+        console.error('Failed to import FFmpeg modules:', error);
+        return;
+      }
+    }
+    
+    // Ensure the binaries exist and are executable
+    if (fs.existsSync(ffmpegPath)) {
+      ffmpeg.setFfmpegPath(ffmpegPath);
+    } else {
+      console.error('FFmpeg binary not found at:', ffmpegPath);
+    }
+    
+    if (fs.existsSync(ffprobePath)) {
+      ffmpeg.setFfprobePath(ffprobePath);
+    } else {
+      console.error('FFprobe binary not found at:', ffprobePath);
+    }
     
     console.log('FFmpeg path:', ffmpegPath);
     console.log('FFprobe path:', ffprobePath);
+    console.log('App packaged:', app.isPackaged);
   }
 
   // Queue an operation for processing
