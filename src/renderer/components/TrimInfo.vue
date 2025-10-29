@@ -33,6 +33,11 @@ const selectedClip = computed(() => {
 });
 
 const formatTime = (seconds) => {
+  // Validate input
+  if (!seconds || isNaN(seconds) || !isFinite(seconds)) {
+    return '0:00.00';
+  }
+  
   const mins = Math.floor(seconds / 60);
   const secs = (seconds % 60).toFixed(2);
   return `${mins}:${secs.padStart(5, '0')}`;

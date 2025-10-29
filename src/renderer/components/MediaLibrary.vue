@@ -234,6 +234,23 @@ const selectClip = (clip) => {
   selectedClip.value = clip.id;
   console.log('Selected clip:', clip);
   
+  // Validate clip data before adding to timeline
+  if (!clip || !clip.filePath || !clip.fileName) {
+    console.error('Invalid clip data: missing required properties');
+    return;
+  }
+  
+  // Validate duration is a valid number
+  const duration = parseFloat(clip.duration);
+  if (isNaN(duration) || duration <= 0) {
+    console.error('Invalid clip duration:', clip.duration);
+    return;
+  }
+  
+  // Validate dimensions with fallbacks
+  const width = parseFloat(clip.width) || 1920;
+  const height = parseFloat(clip.height) || 1080;
+  
   // Add clip to timeline at current playhead position
   const timelineStore = useTimelineStore();
   const playheadTime = timelineStore.playheadPosition;
@@ -245,15 +262,19 @@ const selectClip = (clip) => {
       id: `clip_${Date.now()}`,
       filePath: clip.filePath,
       fileName: clip.fileName,
-      duration: clip.duration,
+      duration: duration,
+      width: width,
+      height: height,
       startTime: playheadTime,
-      endTime: playheadTime + clip.duration
+      endTime: playheadTime + duration
     });
     
     console.log('Added clip to timeline:', {
       trackId,
       startTime: playheadTime,
-      duration: clip.duration
+      duration: duration,
+      width: width,
+      height: height
     });
   } else {
     console.error('No track available to add clip');

@@ -21,6 +21,11 @@ const formattedTotalTime = computed(() => {
 });
 
 const formatTime = (seconds) => {
+  // Validate input
+  if (!seconds || isNaN(seconds) || !isFinite(seconds)) {
+    return '00:00:00';
+  }
+  
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   const frames = Math.floor((seconds % 1) * 30); // Assuming 30fps

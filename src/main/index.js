@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 import FFmpegHandler from './ffmpegHandler.js';
 import { RecordingHandler } from './recordingHandler.js';

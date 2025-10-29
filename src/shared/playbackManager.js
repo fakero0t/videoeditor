@@ -89,7 +89,7 @@ class PlaybackManager {
       
       // Update playhead position
       const currentTime = this.timelineStore.playheadPosition;
-      const newTime = currentTime + (1/60) * this.playbackSpeed; // 60fps updates
+      const newTime = currentTime + (1/30) * this.playbackSpeed; // 30fps updates
       
       this.timelineStore.playheadPosition = newTime;
       

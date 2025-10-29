@@ -32,6 +32,12 @@ class ScrubManager {
   updateScrub(newTime) {
     if (!this.scrubbing) return;
     
+    // Validate newTime
+    if (isNaN(newTime) || !isFinite(newTime)) {
+      console.warn('Invalid scrub time:', newTime);
+      return;
+    }
+    
     // Calculate velocity (seconds per second)
     const deltaTime = newTime - this.lastScrubTime;
     const deltaRealTime = 16.67 / 1000; // Approximate frame time
@@ -160,6 +166,12 @@ class ScrubManager {
   clickToPosition(clickX, canvasRect, pixelsPerSecond) {
     const relativeX = clickX - canvasRect.left;
     const newTime = relativeX / pixelsPerSecond;
+    
+    // Validate calculated time
+    if (isNaN(newTime) || !isFinite(newTime)) {
+      console.warn('Invalid click time calculated:', newTime);
+      return;
+    }
     
     // Constrain to timeline bounds
     const constrainedTime = Math.max(

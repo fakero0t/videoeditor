@@ -28,21 +28,41 @@ export const useTimelineStore = (appContext = 'clipforge') => {
     const track = tracks.value.find(t => t.id === trackId);
     if (!track) return null;
     
+    // Validate required properties
+    if (!mediaClip || !mediaClip.filePath || !mediaClip.fileName) {
+      console.error('Invalid mediaClip: missing required properties');
+      return null;
+    }
+    
+    // Validate and sanitize duration
+    const duration = parseFloat(mediaClip.duration);
+    if (isNaN(duration) || duration <= 0) {
+      console.error('Invalid clip duration:', mediaClip.duration);
+      return null;
+    }
+    
+    // Validate and sanitize dimensions with fallbacks
+    const width = parseFloat(mediaClip.width) || 1920;
+    const height = parseFloat(mediaClip.height) || 1080;
+    
+    // Validate startTime
+    const validStartTime = Math.max(0, parseFloat(startTime) || 0);
+    
     const timelineClip = {
       id: generateId(),
       trackId,
       mediaFileId: mediaClip.id,
       filePath: mediaClip.filePath,
       fileName: mediaClip.fileName,
-      startTime,
-      duration: mediaClip.duration,
-      width: mediaClip.width,
-      height: mediaClip.height,
+      startTime: validStartTime,
+      duration: duration,
+      width: width,
+      height: height,
       
       // Trim settings (non-destructive)
       trimStart: 0,
-      trimEnd: mediaClip.duration,
-      sourceDuration: mediaClip.duration,
+      trimEnd: duration,
+      sourceDuration: duration,
       
       // Visual properties
       color: generateClipColor(track.clips.length)
@@ -140,13 +160,30 @@ export const useTimelineStore = (appContext = 'clipforge') => {
     
     tracks.value.forEach(track => {
       track.clips.forEach(clip => {
-        const clipEnd = clip.startTime + clip.duration;
-        maxEndTime = Math.max(maxEndTime, clipEnd);
+        // Validate clip properties before calculation
+        const startTime = parseFloat(clip.startTime);
+        const duration = parseFloat(clip.duration);
+        
+        if (isNaN(startTime) || isNaN(duration) || duration <= 0) {
+          console.warn('Invalid clip data detected:', { clipId: clip.id, startTime, duration });
+          return; // Skip invalid clips
+        }
+        
+        const clipEnd = startTime + duration;
+        if (!isNaN(clipEnd) && clipEnd > 0) {
+          maxEndTime = Math.max(maxEndTime, clipEnd);
+        }
       });
     });
     
-    // Add 10 second buffer
-    timelineDuration.value = maxEndTime + 10;
+    // Validate final duration
+    const finalDuration = maxEndTime + 10;
+    if (isNaN(finalDuration) || finalDuration <= 0) {
+      console.error('Invalid timeline duration calculated:', finalDuration);
+      timelineDuration.value = 60; // Fallback to minimum
+    } else {
+      timelineDuration.value = finalDuration;
+    }
   };
   
   const markDirty = () => {

@@ -322,12 +322,22 @@ const getTimeInterval = () => {
 };
 
 const formatTime = (seconds) => {
+  // Validate input
+  if (!seconds || isNaN(seconds) || !isFinite(seconds)) {
+    return '0:00';
+  }
+  
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
 const formatDuration = (seconds) => {
+  // Validate input
+  if (!seconds || isNaN(seconds) || !isFinite(seconds)) {
+    return '0.0s';
+  }
+  
   if (seconds < 60) {
     return `${seconds.toFixed(1)}s`;
   }
@@ -668,6 +678,12 @@ const handleDrop = (event) => {
       
       const targetTrackId = Math.floor(y / 100) + 1;
       const targetTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+      
+      // Validate target time before adding clip
+      if (isNaN(targetTime) || !isFinite(targetTime)) {
+        console.error('Invalid target time calculated:', targetTime);
+        return;
+      }
       
       // Add clip to timeline
       timelineStore.addClipToTrack(`track-${targetTrackId}`, data.clip, targetTime);
