@@ -15,6 +15,7 @@ export const useTimelineStore = defineStore('timeline', () => {
   const timelineDuration = ref(60); // minimum 60 seconds
   const selectedClips = ref([]);
   const isDirty = ref(true); // Trigger re-render
+  const panMode = ref(false);
   
   // Computed
   const pixelsPerSecond = computed(() => 100 * zoomLevel.value);
@@ -155,6 +156,11 @@ export const useTimelineStore = defineStore('timeline', () => {
     isDirty.value = false;
   };
   
+  const setPanMode = (enabled) => {
+    panMode.value = enabled;
+    markDirty();
+  };
+  
   const getClipById = (clipId) => {
     for (const track of tracks.value) {
       const clip = track.clips.find(c => c.id === clipId);
@@ -205,6 +211,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     timelineDuration,
     selectedClips,
     isDirty,
+    panMode,
     
     // Computed
     pixelsPerSecond,
@@ -224,6 +231,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     updateTimelineDuration,
     markDirty,
     clearDirty,
+    setPanMode,
     getClipById,
     getClipsAtTime,
     moveClipBetweenTracks

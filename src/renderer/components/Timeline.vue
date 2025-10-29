@@ -76,6 +76,11 @@ const currentTrimState = ref(null);
 // Split state
 const showSplitIndicator = ref(false);
 
+// Pan mode state
+const isPanning = ref(false);
+const panStartX = ref(0);
+const panStartScrollX = ref(0);
+
 onMounted(() => {
   ctx = timelineCanvas.value.getContext('2d');
   timeRulerCtx = timeRuler.value.getContext('2d');
@@ -100,6 +105,9 @@ onMounted(() => {
     showSplitIndicator.value = show;
     timelineStore.markDirty();
   };
+  
+  // Set initial cursor based on pan mode
+  timelineCanvas.value.style.cursor = timelineStore.panMode ? 'grab' : 'default';
   
   // Add keyboard event listeners
   document.addEventListener('keydown', handleKeyDown);
@@ -378,6 +386,16 @@ const handleMouseDown = (event) => {
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   
+  // NEW: Handle pan mode - Start panning
+  if (timelineStore.panMode) {
+    isPanning.value = true;
+    panStartX.value = event.clientX;
+    panStartScrollX.value = timelineStore.scrollPosition;
+    timelineCanvas.value.style.cursor = 'grabbing';
+    event.preventDefault();
+    return;
+  }
+  
   // Check if clicking on a trim handle
   const selectedClipIds = clipSelectionManager.getSelectedClipIds();
   const hoverState = trimManager.checkHoverState(
@@ -393,7 +411,7 @@ const handleMouseDown = (event) => {
     return;
   }
   
-  // Check if clicking on playhead handle
+  // Check if clicking on playhead handle (STILL ALLOWED in pan mode)
   if (playheadRenderer && playheadRenderer.isOverHandle(x, y)) {
     isScrubbing.value = true;
     const initialTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
@@ -403,7 +421,7 @@ const handleMouseDown = (event) => {
     return;
   }
   
-  // Check if clicking near playhead line
+  // Check if clicking near playhead line (STILL ALLOWED in pan mode)
   if (playheadRenderer && playheadRenderer.isNearPlayhead(x, 5)) {
     isScrubbing.value = true;
     const initialTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
@@ -413,20 +431,26 @@ const handleMouseDown = (event) => {
     return;
   }
   
-  // Check for clip clicks
-  const clickedClip = getClipAtPosition(x, y);
-  if (clickedClip) {
-    // Select clip
-    clipSelectionManager.selectClip(clickedClip.id, event.ctrlKey);
-    
-    // Start drag from timeline
-    const trackId = Math.floor(y / 100) + 1;
-    dragDropManager.startDragFromTimeline(clickedClip, trackId, event);
+  // MODIFIED: Don't allow clip selection/dragging in pan mode
+  if (!timelineStore.panMode) {
+    const clickedClip = getClipAtPosition(x, y);
+    if (clickedClip) {
+      // Select clip
+      clipSelectionManager.selectClip(clickedClip.id, event.ctrlKey);
+      
+      // Start drag from timeline
+      const trackId = Math.floor(y / 100) + 1;
+      dragDropManager.startDragFromTimeline(clickedClip, trackId, event);
+    } else {
+      // Clear selection if clicking empty space
+      clipSelectionManager.clearSelection();
+      
+      // Position playhead
+      const time = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+      timelineStore.setPlayheadPosition(time);
+    }
   } else {
-    // Clear selection if clicking empty space
-    clipSelectionManager.clearSelection();
-    
-    // Position playhead
+    // In pan mode, just position playhead
     const time = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
     timelineStore.setPlayheadPosition(time);
   }
@@ -436,6 +460,14 @@ const handleMouseMove = (event) => {
   const rect = timelineCanvas.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
+  
+  // NEW: Handle panning motion
+  if (isPanning.value) {
+    const deltaX = event.clientX - panStartX.value;
+    const newScrollPosition = panStartScrollX.value - deltaX;
+    timelineStore.setScrollPosition(Math.max(0, newScrollPosition));
+    return;
+  }
   
   // Handle active trim
   if (trimManager.trimming) {
@@ -449,6 +481,12 @@ const handleMouseMove = (event) => {
     scrubManager.updateScrub(newTime);
     showTimeTooltip.value = true;
     tooltipPosition.value = { x, y };
+    return;
+  }
+  
+  // NEW: Update cursor for pan mode
+  if (timelineStore.panMode && !isPanning.value && !isScrubbing.value) {
+    timelineCanvas.value.style.cursor = 'grab';
     return;
   }
   
@@ -467,7 +505,8 @@ const handleMouseMove = (event) => {
     renderTimeline(); // Re-render to show hover state
   } else {
     if (!trimManager.trimming && !isScrubbing.value && !dragDropManager.dragState.isDragging) {
-      document.body.style.cursor = 'default';
+      // Reset cursor based on pan mode
+      timelineCanvas.value.style.cursor = timelineStore.panMode ? 'grab' : 'default';
     }
     currentTrimState.value = null;
   }
@@ -505,6 +544,14 @@ const handleMouseMove = (event) => {
 };
 
 const handleMouseUp = (event) => {
+  // NEW: Handle pan end
+  if (isPanning.value) {
+    isPanning.value = false;
+    timelineCanvas.value.style.cursor = timelineStore.panMode ? 'grab' : 'default';
+    event.preventDefault();
+    return;
+  }
+  
   // Handle trim end
   if (trimManager.trimming) {
     trimManager.endTrim();
@@ -582,7 +629,8 @@ const handleMouseLeave = (event) => {
     isScrubbing.value = false;
     showTimeTooltip.value = false;
   }
-  document.body.style.cursor = 'default';
+  // Reset cursor based on pan mode
+  timelineCanvas.value.style.cursor = timelineStore.panMode ? 'grab' : 'default';
 };
 
 // Keyboard shortcuts
@@ -695,6 +743,13 @@ watch(() => timelineStore.scrollPosition, () => {
 watch(() => timelineStore.selectedClips, () => {
   timelineStore.markDirty();
 }, { deep: true });
+
+// Watch for pan mode changes to update cursor
+watch(() => timelineStore.panMode, (newPanMode) => {
+  if (timelineCanvas.value) {
+    timelineCanvas.value.style.cursor = newPanMode ? 'grab' : 'default';
+  }
+});
 </script>
 
 <style scoped>

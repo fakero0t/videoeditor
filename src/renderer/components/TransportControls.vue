@@ -17,6 +17,8 @@
       ⏹️
     </button>
     
+    <PanToggle />
+    
     <div class="time-display">
       {{ formatTime(currentTime) }} / {{ formatTime(totalDuration) }}
     </div>
@@ -49,6 +51,7 @@ import { useTimelineStore } from '../stores/timelineStore';
 import { PlaybackManager } from '../../shared/playbackManager';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
 import ExportDialog from './ExportDialog.vue';
+import PanToggle from './PanToggle.vue';
 
 const timelineStore = useTimelineStore();
 const videoPlayerPool = new VideoPlayerPool();

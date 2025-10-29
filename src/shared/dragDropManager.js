@@ -38,6 +38,11 @@ class DragDropManager {
 
   // Initiate drag from timeline
   startDragFromTimeline(clip, trackId, event) {
+    // NEW: Don't allow drag if pan mode is active
+    if (this.timelineStore.panMode) {
+      return;
+    }
+    
     const rect = this.canvas.getBoundingClientRect();
     const canvasX = event.clientX - rect.left;
     // Calculate clip's visual position on canvas (accounting for scroll)
