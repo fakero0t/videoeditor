@@ -73,6 +73,53 @@ export const useMediaStore = defineStore('media', () => {
     importErrors.value = [];
   };
 
+  const serialize = () => {
+    return mediaFiles.value.map(file => ({
+      id: file.id,
+      fileName: file.fileName,
+      originalPath: file.filePath, // Current path before project save
+      projectPath: '', // Will be set during save
+      duration: file.duration,
+      width: file.width,
+      height: file.height,
+      codec: file.codec,
+      bitrate: file.bitrate,
+      frameRate: file.frameRate,
+      hasAudio: file.hasAudio,
+      fileSize: file.fileSize,
+      format: file.format,
+      thumbnailPath: file.thumbnailPath,
+      isRecording: file.isRecording || false,
+      createdAt: file.createdAt
+    }));
+  };
+
+  const deserialize = (mediaData) => {
+    // Clear existing media
+    mediaFiles.value = [];
+    
+    // Restore media files
+    mediaData.forEach(fileData => {
+      mediaFiles.value.push({
+        id: fileData.id,
+        filePath: fileData.projectPath, // Use project path
+        fileName: fileData.fileName,
+        duration: fileData.duration,
+        width: fileData.width,
+        height: fileData.height,
+        codec: fileData.codec,
+        bitrate: fileData.bitrate,
+        frameRate: fileData.frameRate,
+        hasAudio: fileData.hasAudio,
+        fileSize: fileData.fileSize,
+        format: fileData.format,
+        thumbnailPath: fileData.thumbnailPath,
+        isRecording: fileData.isRecording || false,
+        createdAt: fileData.createdAt
+      });
+    });
+  };
+
   return {
     // State
     mediaFiles,
@@ -89,6 +136,8 @@ export const useMediaStore = defineStore('media', () => {
     setImportStatus,
     setImportProgress,
     addImportError,
-    clearImportErrors
+    clearImportErrors,
+    serialize,
+    deserialize
   };
 });

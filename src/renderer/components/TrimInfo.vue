@@ -39,26 +39,35 @@ const formatTime = (seconds) => {
 };
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .trim-info {
-  background: #2a2a2a;
-  padding: 12px;
-  border-radius: 4px;
-  font-size: 12px;
+  @include background-color('inputs-bg');
+  padding: 6px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  font-size: 10px;
+  margin: 4px;
 }
 
 .info-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .label {
-  color: #999;
+  @include font-color('font-disabled');
 }
 
 .value {
-  color: #4a90e2;
+  @include font-color('font-color');
   font-weight: bold;
+  font-family: 'Courier New', monospace;
 }
 </style>

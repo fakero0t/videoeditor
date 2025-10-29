@@ -51,7 +51,8 @@
         class="clip-item"
         :class="{ 
           'selected': selectedClip === clip.id,
-          'dragging': draggingClip === clip.id
+          'dragging': draggingClip === clip.id,
+          'is-recording': clip.isRecording
         }"
         @click="selectClip(clip)"
         @dragstart="handleDragStart($event, clip)"
@@ -72,6 +73,7 @@
               <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
             </svg>
           </div>
+          <div v-if="clip.isRecording" class="recording-badge">REC</div>
         </div>
         
         <!-- Clip Info -->
@@ -118,6 +120,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useMediaStore } from '../stores/mediaStore';
+import { useTimelineStore } from '../stores/timelineStore';
 import importService from '../services/importService';
 import { formatDuration, formatFileSize, getVideoCodecName } from '../../shared/utils/videoUtils';
 
@@ -221,7 +224,31 @@ const handleGlobalDragLeave = (event) => {
 const selectClip = (clip) => {
   selectedClip.value = clip.id;
   console.log('Selected clip:', clip);
-  // TODO: Implement media selection for timeline
+  
+  // Add clip to timeline at current playhead position
+  const timelineStore = useTimelineStore();
+  const playheadTime = timelineStore.playheadPosition;
+  
+  // Add to track 1 (main track)
+  const trackId = timelineStore.tracks[0]?.id;
+  if (trackId) {
+    timelineStore.addClipToTrack(trackId, {
+      id: `clip_${Date.now()}`,
+      filePath: clip.filePath,
+      fileName: clip.fileName,
+      duration: clip.duration,
+      startTime: playheadTime,
+      endTime: playheadTime + clip.duration
+    });
+    
+    console.log('Added clip to timeline:', {
+      trackId,
+      startTime: playheadTime,
+      duration: clip.duration
+    });
+  } else {
+    console.error('No track available to add clip');
+  }
 };
 
 const handleDragStart = (event, clip) => {
@@ -305,15 +332,23 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .media-library {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #1e293b;
-  padding: 16px;
+  @include background-color('inputs-bg');
+  padding: 4px;
   overflow: hidden;
   position: relative;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .drop-overlay {
@@ -322,8 +357,8 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(59, 130, 246, 0.1);
-  border: 3px dashed #3b82f6;
+  background: rgba(0, 100, 255, 0.1);
+  border: 3px dashed #0064ff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -332,26 +367,30 @@ onUnmounted(() => {
 
 .drop-message {
   text-align: center;
-  color: #3b82f6;
+  color: #0064ff;
+  @include font;
 }
 
 .drop-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  font-size: 32px;
+  margin-bottom: 8px;
 }
 
 .import-progress-bar {
   position: relative;
-  height: 40px;
-  background: #1e293b;
-  border-radius: 4px;
+  height: 20px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+  background: #0064ff;
   transition: width 0.3s ease;
 }
 
@@ -360,132 +399,153 @@ onUnmounted(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: white;
-  font-size: 14px;
-  font-weight: 500;
+  @include font-color('font-color');
+  font-size: 11px;
+  font-weight: bold;
 }
 
 .import-errors {
-  background: #fef2f2;
-  border: 1px solid #fca5a5;
-  border-radius: 4px;
-  padding: 12px;
-  margin-bottom: 16px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  padding: 6px;
+  margin-bottom: 8px;
 }
 
 .error-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  color: #dc2626;
-  font-weight: 600;
-  margin-bottom: 8px;
+  @include font-color('font-color');
+  font-weight: bold;
+  margin-bottom: 4px;
+  font-size: 11px;
 }
 
 .close-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
+  @include d3-object;
+  @include font;
+  padding: 2px 6px;
   cursor: pointer;
-  color: #dc2626;
+  font-size: 11px;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background: #d0d0d0;
+  }
+  
+  &:active {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
 }
 
 .error-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  color: #7f1d1d;
-  font-size: 13px;
+  @include font-color('font-color');
+  font-size: 10px;
 }
 
 .error-list li {
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .library-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
+  padding: 2px;
 }
 
 .library-header h3 {
   margin: 0;
-  color: #f1f5f9;
-  font-size: 16px;
-  font-weight: 600;
+  @include font-color('font-color');
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .import-btn {
-  padding: 8px 16px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 6px;
+  @include d3-object;
+  @include font;
+  padding: 4px 8px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.import-btn:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.import-btn:disabled {
-  background: #6b7280;
-  cursor: not-allowed;
+  font-size: 11px;
+  
+  &:hover:not(:disabled) {
+    background: #d0d0d0;
+  }
+  
+  &:active:not(:disabled) {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
+  
+  &:disabled {
+    @include font-color('font-disabled');
+    cursor: not-allowed;
+  }
 }
 
 .clips-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 4px;
   overflow-y: auto;
-  padding-right: 4px;
+  padding-right: 2px;
 }
 
 .clip-item {
   position: relative;
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 6px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  padding: 4px;
   cursor: pointer;
-  transition: all 0.2s;
-  min-height: 140px;
-}
-
-.clip-item:hover {
-  border-color: #3b82f6;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.clip-item.selected {
-  border-color: #3b82f6;
-  background: #1e3a8a;
-  box-shadow: 0 0 0 1px #3b82f6;
-}
-
-.clip-item.dragging {
-  opacity: 0.5;
-  transform: scale(0.95);
-  border-color: #10b981;
-  background: #064e3b;
-  box-shadow: 0 0 0 1px #10b981;
+  min-height: 100px;
+  
+  &:hover {
+    background: #d0d0d0;
+  }
+  
+  &.selected {
+    @include background-color('inputs-bg');
+    box-shadow: inset 1px 1px 0 0 #000000, inset -1px -1px 0 0 #ffffff;
+  }
+  
+  &.dragging {
+    opacity: 0.5;
+    background: #c0c0c0;
+  }
 }
 
 .thumbnail-container {
   width: 100%;
-  height: 90px;
-  background: #1f2937;
+  height: 60px;
+  @include background-color('inputs-bg');
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  margin-bottom: 6px;
-  border-radius: 4px;
+  margin-bottom: 4px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
   overflow: hidden;
 }
 
@@ -502,149 +562,86 @@ onUnmounted(() => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background: #1f2937;
+  @include background-color('inputs-bg');
   position: absolute;
   top: 0;
   left: 0;
 }
 
 .icon-video {
-  width: 24px;
-  height: 24px;
-  fill: #64748b;
+  width: 16px;
+  height: 16px;
+  fill: #808080;
 }
 
 .clip-info {
-  padding: 4px 8px 8px 8px;
+  padding: 2px 4px 4px 4px;
 }
 
 .filename {
-  font-weight: 600;
-  color: #f1f5f9;
-  margin-bottom: 6px;
+  font-weight: bold;
+  @include font-color('font-color');
+  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 13px;
-  line-height: 1.3;
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 .metadata {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #94a3b8;
-  margin-bottom: 2px;
+  gap: 2px;
+  font-size: 9px;
+  @include font-color('font-color');
+  margin-bottom: 1px;
 }
 
 .metadata-secondary {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: #94a3b8;
+  gap: 2px;
+  font-size: 9px;
+  @include font-color('font-color');
 }
 
 .separator {
-  color: #64748b;
-}
-
-.media-thumbnail {
-  width: 100%;
-  height: 90px;
-  background: #1f2937;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  margin-bottom: 6px;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.media-thumbnail img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.thumbnail-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  background: #1f2937;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.play-icon {
-  font-size: 24px;
-  opacity: 0.7;
-  color: #64748b;
-}
-
-.media-info {
-  padding: 4px 8px 8px 8px;
-}
-
-.file-name {
-  font-weight: 600;
-  color: #f1f5f9;
-  margin-bottom: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 13px;
-  line-height: 1.3;
-}
-
-.file-details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 11px;
-  color: #94a3b8;
-  line-height: 1.4;
-}
-
-.duration, .resolution, .codec {
-  display: block;
-  font-weight: 500;
+  color: #808080;
 }
 
 .remove-btn {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  border: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  top: 2px;
+  right: 2px;
+  @include d3-object;
+  @include font;
+  width: 16px;
+  height: 16px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 10px;
   font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: all 0.2s;
   z-index: 10;
+  
+  &:hover {
+    background: #ff0000;
+    color: white;
+  }
+  
+  &:active {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
 }
 
 .clip-item:hover .remove-btn {
   opacity: 1;
-}
-
-.remove-btn:hover {
-  background: #ef4444;
-  transform: scale(1.1);
 }
 
 .empty-state {
@@ -653,63 +650,95 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #94a3b8;
+  @include font-color('font-color');
   text-align: center;
-  padding: 40px 20px;
+  padding: 20px 10px;
 }
 
 .empty-icon {
-  width: 80px;
-  height: 80px;
-  fill: #475569;
-  margin-bottom: 16px;
+  width: 40px;
+  height: 40px;
+  fill: #808080;
+  margin-bottom: 8px;
 }
 
 .empty-state h4 {
-  margin: 0 0 8px 0;
-  color: #e2e8f0;
-  font-size: 18px;
-  font-weight: 600;
+  margin: 0 0 4px 0;
+  @include font-color('font-color');
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .empty-state p {
-  margin: 0 0 24px 0;
-  font-size: 14px;
+  margin: 0 0 12px 0;
+  font-size: 10px;
 }
 
 .import-btn-large {
-  padding: 12px 24px;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
+  @include d3-object;
+  @include font;
+  padding: 6px 12px;
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  transition: background 0.2s;
-}
-
-.import-btn-large:hover {
-  background: #2563eb;
+  font-size: 11px;
+  
+  &:hover {
+    background: #d0d0d0;
+  }
+  
+  &:active {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
 }
 
 /* Scrollbar styling */
 .clips-grid::-webkit-scrollbar {
-  width: 8px;
+  width: 16px;
+  height: 16px;
 }
 
 .clips-grid::-webkit-scrollbar-track {
-  background: #0f172a;
-  border-radius: 4px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
 }
 
 .clips-grid::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 4px;
+  @include d3-object;
+  background: #c0c0c0;
+  
+  &:hover {
+    background: #d0d0d0;
+  }
 }
 
-.clips-grid::-webkit-scrollbar-thumb:hover {
-  background: #64748b;
+.clips-grid::-webkit-scrollbar-corner {
+  @include background-color('inputs-bg');
+}
+
+/* Recording badge styles */
+.clip-item.is-recording {
+  background: #c0c0c0;
+  border-color: #ff0000;
+}
+
+.recording-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: #ff0000;
+  color: white;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: bold;
+  z-index: 10;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 </style>
 

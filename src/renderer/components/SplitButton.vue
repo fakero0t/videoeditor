@@ -91,78 +91,91 @@ const handleMouseLeave = () => {
 };
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .split-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: #4a90e2;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  gap: 4px;
+  padding: 4px 8px;
+  @include d3-object;
+  @include font;
   cursor: pointer;
-  font-size: 14px;
-  transition: background 0.2s;
+  font-size: 11px;
   position: relative;
-}
-
-.split-btn:hover:not(.disabled) {
-  background: #357abd;
-}
-
-.split-btn.disabled {
-  background: #666;
-  cursor: not-allowed;
-  opacity: 0.5;
+  
+  &:hover:not(.disabled) {
+    background: #d0d0d0;
+  }
+  
+  &:active:not(.disabled) {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
+  
+  &.disabled {
+    @include font-color('font-disabled');
+    cursor: not-allowed;
+  }
 }
 
 .shortcut {
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 3px;
+  font-size: 9px;
+  @include background-color('inputs-bg');
+  padding: 1px 4px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .split-preview {
   position: absolute;
   top: 100%;
   left: 0;
-  margin-top: 8px;
-  background: rgba(0, 0, 0, 0.9);
-  padding: 12px;
-  border-radius: 6px;
-  min-width: 200px;
+  margin-top: 4px;
+  @include background-color('inputs-bg');
+  padding: 6px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  min-width: 150px;
   z-index: 1000;
 }
 
 .preview-item {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .clip-name {
-  font-size: 12px;
-  color: #ccc;
-  margin-bottom: 4px;
+  font-size: 10px;
+  @include font-color('font-color');
+  margin-bottom: 2px;
 }
 
 .split-details {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 4px;
+  font-size: 10px;
   font-weight: bold;
 }
 
 .left {
-  color: #4a90e2;
+  @include font-color('font-color');
 }
 
 .divider {
-  color: #666;
+  @include font-color('font-disabled');
 }
 
 .right {
-  color: #e24a90;
+  @include font-color('font-color');
 }
 </style>

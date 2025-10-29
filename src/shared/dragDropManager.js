@@ -17,6 +17,8 @@ class DragDropManager {
     this.snapEnabled = true;
     this.gridSnapEnabled = false;
     this.gridInterval = 1.0; // seconds
+    this.SNAP_THRESHOLD = 10; // pixels
+    this.snapIndicator = null; // { x: number, type: 'grid' | 'clip-start' | 'clip-end' }
   }
 
   // Initiate drag from media library
@@ -81,10 +83,12 @@ class DragDropManager {
     const targetTrackId = this.getTrackFromY(canvasY);
     let targetTime = this.getTimeFromX(canvasX - this.dragState.dragOffset.x);
     
-    // Apply grid snap if enabled
-    if (this.gridSnapEnabled) {
-      targetTime = this.snapToGrid(targetTime);
-    }
+    // NEW: Apply all snapping logic
+    targetTime = this.applySnapping(
+      targetTime,
+      targetTrackId,
+      this.dragState.draggedClip?.id
+    );
     
     // Constrain to valid positions
     targetTime = Math.max(0, targetTime);
@@ -112,10 +116,12 @@ class DragDropManager {
     const targetTrackId = this.getTrackFromY(canvasY);
     let targetTime = this.getTimeFromX(canvasX - this.dragState.dragOffset.x);
     
-    // Apply grid snap if enabled
-    if (this.gridSnapEnabled) {
-      targetTime = this.snapToGrid(targetTime);
-    }
+    // NEW: Apply all snapping logic
+    targetTime = this.applySnapping(
+      targetTime,
+      targetTrackId,
+      this.dragState.draggedClip?.id
+    );
     
     targetTime = Math.max(0, targetTime);
     
@@ -358,6 +364,94 @@ class DragDropManager {
     return Math.round(time / this.gridInterval) * this.gridInterval;
   }
 
+  // Snap to nearby clip edges
+  snapToClipEdges(time, trackId, excludeClipId) {
+    if (!this.snapEnabled) return { time, snapped: false };
+    
+    const track = this.timelineStore.tracks.find(t => t.id === `track-${trackId}`);
+    if (!track) return { time, snapped: false };
+    
+    const targetPixelX = time * this.timelineStore.pixelsPerSecond;
+    let closestSnapTime = null;
+    let closestDistance = Infinity;
+    let snapType = null;
+    
+    // Check all clips in the track
+    track.clips.forEach(clip => {
+      if (clip.id === excludeClipId) return; // Skip self
+      
+      const clipStartX = clip.startTime * this.timelineStore.pixelsPerSecond;
+      const clipEndX = (clip.startTime + clip.duration) * this.timelineStore.pixelsPerSecond;
+      
+      // Check snap to clip start
+      const distanceToStart = Math.abs(targetPixelX - clipStartX);
+      if (distanceToStart < this.SNAP_THRESHOLD && distanceToStart < closestDistance) {
+        closestDistance = distanceToStart;
+        closestSnapTime = clip.startTime;
+        snapType = 'clip-start';
+      }
+      
+      // Check snap to clip end
+      const distanceToEnd = Math.abs(targetPixelX - clipEndX);
+      if (distanceToEnd < this.SNAP_THRESHOLD && distanceToEnd < closestDistance) {
+        closestDistance = distanceToEnd;
+        closestSnapTime = clip.startTime + clip.duration;
+        snapType = 'clip-end';
+      }
+    });
+    
+    if (closestSnapTime !== null) {
+      this.snapIndicator = {
+        x: closestSnapTime * this.timelineStore.pixelsPerSecond,
+        type: snapType
+      };
+      return { time: closestSnapTime, snapped: true };
+    }
+    
+    return { time, snapped: false };
+  }
+
+  // Apply all snap logic (grid first, then clip edges)
+  applySnapping(time, trackId, excludeClipId) {
+    let finalTime = time;
+    let snapped = false;
+    
+    // Apply grid snap if enabled
+    if (this.gridSnapEnabled) {
+      finalTime = this.snapToGrid(time);
+      snapped = true;
+      this.snapIndicator = {
+        x: finalTime * this.timelineStore.pixelsPerSecond,
+        type: 'grid'
+      };
+    }
+    
+    // Apply clip snap if enabled (can override grid snap if closer)
+    if (this.snapEnabled) {
+      const clipSnap = this.snapToClipEdges(finalTime, trackId, excludeClipId);
+      if (clipSnap.snapped) {
+        finalTime = clipSnap.time;
+        snapped = true;
+      }
+    }
+    
+    if (!snapped) {
+      this.snapIndicator = null;
+    }
+    
+    return finalTime;
+  }
+
+  // Get snap indicator for drawing
+  getSnapIndicator() {
+    return this.snapIndicator;
+  }
+
+  // Clear snap indicator
+  clearSnapIndicator() {
+    this.snapIndicator = null;
+  }
+
   // Helper: Get track from Y coordinate
   getTrackFromY(y) {
     const trackHeight = 100;
@@ -401,6 +495,9 @@ class DragDropManager {
       ghostPreview: null,
       affectedClips: []
     };
+    
+    // NEW: Clear snap indicator
+    this.clearSnapIndicator();
     
     this.timelineStore.markDirty();
   }

@@ -41,6 +41,13 @@ export default defineConfig({
       '@shared': resolve(__dirname, 'src/shared')
     }
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        // SCSS options can be added here if needed
+      }
+    }
+  },
   define: {
     global: 'globalThis',
   },

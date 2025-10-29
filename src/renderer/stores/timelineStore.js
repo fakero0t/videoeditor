@@ -50,7 +50,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     track.clips.push(timelineClip);
     track.clips.sort((a, b) => a.startTime - b.startTime);
     updateTimelineDuration();
-    markDirty();
+    markClipChanged();
     
     return timelineClip.id;
   };
@@ -70,7 +70,7 @@ export const useTimelineStore = defineStore('timeline', () => {
     }
     
     updateTimelineDuration();
-    markDirty();
+    markClipChanged();
   };
   
   const updateClipPosition = (clipId, newStartTime) => {
@@ -80,7 +80,7 @@ export const useTimelineStore = defineStore('timeline', () => {
         clip.startTime = Math.max(0, newStartTime);
         track.clips.sort((a, b) => a.startTime - b.startTime);
         updateTimelineDuration();
-        markDirty();
+        markClipChanged();
         return true;
       }
     }
@@ -93,7 +93,7 @@ export const useTimelineStore = defineStore('timeline', () => {
       if (clip) {
         clip.duration = Math.max(0.1, newDuration);
         updateTimelineDuration();
-        markDirty();
+        markClipChanged();
         return true;
       }
     }
@@ -151,6 +151,16 @@ export const useTimelineStore = defineStore('timeline', () => {
   const markDirty = () => {
     isDirty.value = true;
   };
+
+  // NEW: Mark dirty specifically for clip operations (for unsaved changes)
+  const markClipChanged = () => {
+    isDirty.value = true;
+    
+    // Notify project store if it exists
+    if (window.__projectStore) {
+      window.__projectStore.markDirty();
+    }
+  };
   
   const clearDirty = () => {
     isDirty.value = false;
@@ -197,9 +207,61 @@ export const useTimelineStore = defineStore('timeline', () => {
     toTrack.clips.push(clip);
     toTrack.clips.sort((a, b) => a.startTime - b.startTime);
     updateTimelineDuration();
-    markDirty();
+    markClipChanged();
     
     return true;
+  };
+
+  const serialize = () => {
+    return {
+      duration: timelineDuration.value,
+      playheadPosition: playheadPosition.value,
+      zoomLevel: zoomLevel.value,
+      tracks: tracks.value.map(track => ({
+        id: track.id,
+        name: track.name,
+        height: track.height,
+        clips: track.clips.map(clip => ({
+          id: clip.id,
+          trackId: clip.trackId,
+          mediaFileId: clip.mediaFileId,
+          fileName: clip.fileName,
+          filePath: clip.filePath,
+          startTime: clip.startTime,
+          duration: clip.duration,
+          trimStart: clip.trimStart,
+          trimEnd: clip.trimEnd,
+          sourceDuration: clip.sourceDuration,
+          width: clip.width,
+          height: clip.height,
+          color: clip.color
+        }))
+      }))
+    };
+  };
+
+  const deserialize = (timelineData) => {
+    // Clear existing timeline
+    tracks.value.forEach(track => {
+      track.clips = [];
+    });
+    
+    // Restore timeline state
+    timelineDuration.value = timelineData.duration;
+    playheadPosition.value = timelineData.playheadPosition;
+    zoomLevel.value = timelineData.zoomLevel;
+    
+    // Restore tracks and clips
+    timelineData.tracks.forEach((trackData, index) => {
+      if (index < tracks.value.length) {
+        const track = tracks.value[index];
+        track.clips = trackData.clips.map(clipData => ({
+          ...clipData
+        }));
+      }
+    });
+    
+    markDirty();
   };
   
   return {
@@ -234,7 +296,10 @@ export const useTimelineStore = defineStore('timeline', () => {
     setPanMode,
     getClipById,
     getClipsAtTime,
-    moveClipBetweenTracks
+    moveClipBetweenTracks,
+    serialize,
+    deserialize,
+    markClipChanged
   };
 });
 

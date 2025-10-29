@@ -328,6 +328,39 @@ class FFmpegHandler {
     return resolutions[resolution] || [1920, 1080];
   }
 
+  // WebM to MP4 conversion
+  async convertWebMToMP4(webmPath) {
+    return new Promise((resolve, reject) => {
+      const outputPath = webmPath.replace('.webm', '.mp4');
+      
+      ffmpeg(webmPath)
+        .outputOptions([
+          '-c:v libx264',
+          '-preset fast',
+          '-crf 22',
+          '-c:a aac',
+          '-b:a 128k',
+          '-movflags +faststart'
+        ])
+        .output(outputPath)
+        .on('start', (commandLine) => {
+          console.log('FFmpeg conversion started:', commandLine);
+        })
+        .on('progress', (progress) => {
+          console.log('Conversion progress:', progress.percent);
+        })
+        .on('end', () => {
+          console.log('Conversion complete:', outputPath);
+          resolve(outputPath);
+        })
+        .on('error', (error) => {
+          console.error('Conversion error:', error);
+          reject(error);
+        })
+        .run();
+    });
+  }
+
   // Test FFmpeg installation
   async testFFmpeg() {
     try {

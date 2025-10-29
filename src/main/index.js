@@ -1,11 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
-import { join } from 'path';
+import path from 'path';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import FFmpegHandler from './ffmpegHandler.js';
+import { RecordingHandler } from './recordingHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling
 try {
@@ -21,6 +21,9 @@ let mainWindow = null;
 // Initialize FFmpeg handler
 const ffmpegHandler = new FFmpegHandler();
 
+// Initialize recording handler
+const recordingHandler = new RecordingHandler();
+
 const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -30,7 +33,7 @@ const createWindow = () => {
     title: 'ClipForge',
     backgroundColor: '#1a1a1a',
     webPreferences: {
-      preload: join(__dirname, '../preload/preload.js'),
+      preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // Needed for ffmpeg access
@@ -48,7 +51,7 @@ const createWindow = () => {
     mainWindow.webContents.openDevTools();
   } else {
     // Production mode
-    mainWindow.loadFile(join(__dirname, '../../dist/index.html'));
+    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
 
   // Set up security headers to allow local file access
@@ -138,9 +141,14 @@ ipcMain.handle('app:setPreventQuit', (event, prevent) => {
 });
 
 app.on('before-quit', (event) => {
-  if (preventQuit) {
+  if (preventQuit || isCurrentlyRecording) {
     event.preventDefault();
-    mainWindow.webContents.send('app:quit-requested');
+    
+    if (isCurrentlyRecording) {
+      mainWindow.webContents.send('app:quit-requested-during-recording');
+    } else {
+      mainWindow.webContents.send('app:quit-requested');
+    }
   }
 });
 
@@ -175,4 +183,260 @@ ipcMain.handle('ffmpeg:exportVideo', async (event, config) => {
 
 ipcMain.handle('ffmpeg:cancelExport', () => {
   return ffmpegHandler.cancelExport();
+});
+
+ipcMain.handle('ffmpeg:convertWebMToMP4', async (event, webmPath) => {
+  try {
+    return await ffmpegHandler.convertWebMToMP4(webmPath);
+  } catch (error) {
+    throw error;
+  }
+});
+
+// File system handlers for project management
+ipcMain.handle('fs:copyFile', async (event, source, destination) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  
+  try {
+    // Ensure destination directory exists
+    await fs.mkdir(path.dirname(destination), { recursive: true });
+    
+    // Copy file
+    await fs.copyFile(source, destination);
+    
+    return { success: true };
+  } catch (error) {
+    console.error('File copy error:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('fs:copyFileWithProgress', async (event, source, destination) => {
+  const fs = require('fs');
+  const path = require('path');
+  
+  return new Promise((resolve, reject) => {
+    // Ensure destination directory exists
+    const destDir = path.dirname(destination);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    
+    const readStream = fs.createReadStream(source);
+    const writeStream = fs.createWriteStream(destination);
+    
+    let totalSize = 0;
+    let copiedSize = 0;
+    
+    // Get file size
+    fs.stat(source, (err, stats) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      totalSize = stats.size;
+    });
+    
+    readStream.on('data', (chunk) => {
+      copiedSize += chunk.length;
+      const progress = totalSize > 0 ? (copiedSize / totalSize) * 100 : 0;
+      event.sender.send('fs:copy-progress', { 
+        source: path.basename(source),
+        progress: Math.round(progress),
+        copiedSize,
+        totalSize
+      });
+    });
+    
+    readStream.on('error', reject);
+    writeStream.on('error', reject);
+    writeStream.on('finish', () => resolve({ success: true }));
+    
+    readStream.pipe(writeStream);
+  });
+});
+
+ipcMain.handle('fs:fileExists', async (event, filePath) => {
+  const fs = require('fs').promises;
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('fs:deleteFile', async (event, filePath) => {
+  const fs = require('fs').promises;
+  try {
+    await fs.unlink(filePath);
+    return { success: true };
+  } catch (error) {
+    throw error;
+  }
+});
+
+ipcMain.handle('fs:readFile', async (event, filePath) => {
+  const fs = require('fs').promises;
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return content;
+  } catch (error) {
+    throw error;
+  }
+});
+
+ipcMain.handle('fs:writeFile', async (event, filePath, content) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  
+  try {
+    // Ensure directory exists
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    
+    // Write file - handle both string and binary data
+    if (content instanceof Uint8Array) {
+      await fs.writeFile(filePath, Buffer.from(content));
+    } else {
+      await fs.writeFile(filePath, content, 'utf-8');
+    }
+    
+    return { success: true };
+  } catch (error) {
+    throw error;
+  }
+});
+
+// Project save with rollback on failure
+ipcMain.handle('project:save', async (event, projectPath, projectData, filesToCopy) => {
+  const projectFolder = path.dirname(projectPath);
+  const projectName = path.basename(projectPath, '.cfproj');
+  const mediaFolder = path.join(projectFolder, `${projectName}_media`);
+  const thumbnailFolder = path.join(mediaFolder, '.thumbnails');
+  
+  // Track copied files for rollback
+  const copiedFiles = [];
+  
+  try {
+    // Create folders
+    await fs.mkdir(mediaFolder, { recursive: true });
+    await fs.mkdir(thumbnailFolder, { recursive: true });
+    
+    // Copy each file with progress
+    for (let i = 0; i < filesToCopy.length; i++) {
+      const file = filesToCopy[i];
+      const destPath = path.join(projectFolder, file.destRelative);
+      
+      try {
+        // Copy file
+        await fs.copyFile(file.source, destPath);
+        copiedFiles.push(destPath);
+        
+        // Send progress
+        event.sender.send('fs:copy-progress', {
+          source: path.basename(file.source),
+          progress: 100,
+          copiedSize: (await fs.stat(destPath)).size,
+          totalSize: (await fs.stat(file.source)).size
+        });
+        
+      } catch (copyError) {
+        console.error(`Failed to copy ${file.source}:`, copyError);
+        throw new Error(`Failed to copy file: ${path.basename(file.source)}`);
+      }
+    }
+    
+    // Write project JSON
+    const projectJSON = JSON.stringify(projectData, null, 2);
+    await fs.writeFile(projectPath, projectJSON, 'utf-8');
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Save failed, rolling back:', error);
+    
+    // ROLLBACK: Delete all copied files
+    for (const filePath of copiedFiles) {
+      try {
+        await fs.unlink(filePath);
+      } catch (unlinkError) {
+        console.error(`Failed to rollback ${filePath}:`, unlinkError);
+      }
+    }
+    
+    // Try to delete empty folders
+    try {
+      await fs.rmdir(thumbnailFolder);
+      await fs.rmdir(mediaFolder);
+    } catch (rmdirError) {
+      // Ignore if folders not empty or don't exist
+    }
+    
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// Show message box
+ipcMain.handle('dialog:showMessageBox', async (event, options) => {
+  return await dialog.showMessageBox(mainWindow, options);
+});
+
+// Show open dialog  
+ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
+  return await dialog.showOpenDialog(mainWindow, options);
+});
+
+// Show save dialog
+ipcMain.handle('dialog:showSaveDialog', async (event, options) => {
+  return await dialog.showSaveDialog(mainWindow, options);
+});
+
+// Recording permission handlers
+ipcMain.handle('recording:checkPermissions', async () => {
+  return await recordingHandler.checkPermissions();
+});
+
+ipcMain.handle('recording:requestPermissions', async () => {
+  return await recordingHandler.requestPermissions();
+});
+
+ipcMain.handle('recording:openSystemSettings', () => {
+  recordingHandler.openSystemSettings();
+});
+
+ipcMain.handle('recording:getDiskSpace', async () => {
+  return await recordingHandler.getDiskSpace();
+});
+
+// Desktop capturer (for screen sources)
+ipcMain.handle('recording:getDesktopSources', async () => {
+  const { desktopCapturer } = require('electron');
+  
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['window', 'screen'],
+      thumbnailSize: { width: 150, height: 150 }
+    });
+    
+    return sources.map(source => ({
+      id: source.id,
+      name: source.name,
+      thumbnail: source.thumbnail.toDataURL(),
+      type: source.id.startsWith('screen') ? 'screen' : 'window'
+    }));
+  } catch (error) {
+    console.error('Failed to get desktop sources:', error);
+    throw error;
+  }
+});
+
+// Track recording state for quit prevention
+let isCurrentlyRecording = false;
+
+ipcMain.handle('recording:setRecordingState', (event, recording) => {
+  isCurrentlyRecording = recording;
 });

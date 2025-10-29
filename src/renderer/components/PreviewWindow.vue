@@ -422,34 +422,52 @@ watch(videoElement, (newEl) => {
 }, { immediate: true });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .preview-window {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: #000;
-  color: white;
+  @include background-color('inputs-bg');
+  @include font-color('font-color');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 15px;
-  background: #1a1a1a;
-  border-bottom: 1px solid #333;
+  padding: 4px 8px;
+  @include background-color('inputs-bg');
+  border-bottom: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .preview-header h3 {
   margin: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: bold;
+  @include font-color('font-color');
 }
 
 .time-display {
   font-family: 'Courier New', monospace;
-  font-size: 12px;
-  color: #ccc;
+  font-size: 10px;
+  @include font-color('font-color');
+  padding: 2px 4px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .preview-container {
@@ -461,16 +479,23 @@ watch(videoElement, (newEl) => {
   background: #000;
   overflow: hidden;
   max-height: 100%;
-  min-height: 200px;
+  min-height: 150px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  margin: 2px;
 }
 
 .video-wrapper {
   position: relative;
   max-width: 100% !important;
   max-height: 100% !important;
-  /* temporary debug styling */
-  background: #1a1a1a;
-  border: 2px solid red;
+  background: #000;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .video-wrapper video {
@@ -478,7 +503,6 @@ watch(videoElement, (newEl) => {
   height: 100%;
   object-fit: contain;
   display: block;
-  /* temporary debug sizing */
   min-width: 100px;
   min-height: 100px;
 }
@@ -488,7 +512,7 @@ watch(videoElement, (newEl) => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: #666;
+  @include font-color('font-disabled');
 }
 
 .no-preview-content {
@@ -496,18 +520,18 @@ watch(videoElement, (newEl) => {
 }
 
 .no-preview-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  font-size: 32px;
+  margin-bottom: 8px;
 }
 
 .no-preview p {
-  margin: 8px 0;
-  font-size: 14px;
+  margin: 4px 0;
+  font-size: 11px;
 }
 
 .no-preview-subtitle {
-  color: #888;
-  font-size: 12px;
+  @include font-color('font-disabled');
+  font-size: 10px;
 }
 
 .loading-overlay,
@@ -522,17 +546,17 @@ watch(videoElement, (newEl) => {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.8);
-  color: white;
+  @include font-color('font-color');
 }
 
 .loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #333;
-  border-top: 3px solid #007acc;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #808080;
+  border-top: 2px solid #0000ff;
   border-radius: 50%;
   animation: spin 1s linear infinite;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 @keyframes spin {
@@ -541,48 +565,61 @@ watch(videoElement, (newEl) => {
 }
 
 .error-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  font-size: 32px;
+  margin-bottom: 8px;
 }
 
 .retry-button {
-  background: #007acc;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
+  @include d3-object;
+  @include font;
+  padding: 4px 8px;
   cursor: pointer;
-  font-size: 12px;
-  margin-top: 8px;
-}
-
-.retry-button:hover {
-  background: #005a9e;
+  font-size: 10px;
+  margin-top: 4px;
+  
+  &:hover {
+    background: #d0d0d0;
+  }
+  
+  &:active {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
 }
 
 .preview-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 15px;
-  background: #1a1a1a;
-  border-top: 1px solid #333;
+  gap: 8px;
+  padding: 4px 8px;
+  @include background-color('inputs-bg');
+  border-top: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
-
 
 .time-info {
   font-family: 'Courier New', monospace;
-  font-size: 12px;
-  color: #ccc;
+  font-size: 10px;
+  @include font-color('font-color');
   text-align: center;
   width: 100%;
+  padding: 2px 4px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .current-time {
-  color: #fff;
+  @include font-color('font-color');
 }
 
 .duration {
-  color: #888;
+  @include font-color('font-disabled');
 }
 </style>

@@ -33,6 +33,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useTimelineStore } from '../stores/timelineStore';
+import { useMediaStore } from '../stores/mediaStore';
 import DragDropManager from '../../shared/dragDropManager';
 import ClipSelectionManager from '../../shared/clipSelectionManager';
 import GridSnapToggle from './GridSnapToggle.vue';
@@ -44,6 +45,7 @@ import TrimHandleRenderer from '../../shared/trimHandleRenderer';
 import SplitManager from '../../shared/splitManager';
 
 const timelineStore = useTimelineStore();
+const mediaStore = useMediaStore();
 const timelineCanvas = ref(null);
 const timeRuler = ref(null);
 const timelineContent = ref(null);
@@ -208,6 +210,9 @@ const renderTimeline = () => {
   if (showSplitIndicator.value && splitManager) {
     drawSplitIndicator(ctx);
   }
+  
+  // NEW: Draw snap indicator BEFORE ghost preview
+  drawSnapIndicator(ctx);
 };
 
 const drawClip = (clip, trackY) => {
@@ -217,20 +222,45 @@ const drawClip = (clip, trackY) => {
   // Skip if clip is not visible
   if (x + width < 0 || x > canvasWidth.value) return;
   
+  // NEW: Check if media is missing
+  const mediaFile = mediaStore.mediaFiles.find(m => m.id === clip.mediaFileId);
+  const isMissing = mediaFile && mediaFile.isMissing;
+  
   // Clip background
   const isSelected = timelineStore.selectedClips.includes(clip.id);
-  ctx.fillStyle = isSelected ? '#ff6b6b' : clip.color || '#4a90e2';
+  let fillColor = isSelected ? '#ff6b6b' : clip.color || '#4a90e2';
+  
+  // NEW: Gray out missing media
+  if (isMissing) {
+    fillColor = '#666666';
+  }
+  
+  ctx.fillStyle = fillColor;
   ctx.fillRect(x, trackY + 5, width, 90);
   
+  // NEW: Add diagonal stripes for missing media
+  if (isMissing) {
+    ctx.save();
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 2;
+    for (let i = x; i < x + width; i += 10) {
+      ctx.beginPath();
+      ctx.moveTo(i, trackY + 5);
+      ctx.lineTo(i + 10, trackY + 95);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  
   // Clip border
-  ctx.strokeStyle = isSelected ? '#ff4444' : '#2c5aa0';
+  ctx.strokeStyle = isMissing ? '#ff0000' : (isSelected ? '#ff4444' : '#2c5aa0');
   ctx.lineWidth = isSelected ? 3 : 2;
   ctx.strokeRect(x, trackY + 5, width, 90);
   
   // Clip label
   ctx.fillStyle = '#ffffff';
   ctx.font = '12px Arial';
-  const label = clip.fileName || `Clip ${clip.id.slice(-4)}`;
+  const label = isMissing ? '⚠️ ' + (clip.fileName || 'Missing') : (clip.fileName || `Clip ${clip.id.slice(-4)}`);
   ctx.fillText(label, x + 5, trackY + 25);
   
   // Clip duration text
@@ -362,6 +392,34 @@ const drawScissorsIcon = (ctx, x, y) => {
   ctx.lineTo(x + 5, y);
   ctx.stroke();
   
+  ctx.restore();
+};
+
+const drawSnapIndicator = (ctx) => {
+  if (!dragDropManager) return;
+  
+  const indicator = dragDropManager.getSnapIndicator();
+  if (!indicator) return;
+  
+  const x = indicator.x - timelineStore.scrollPosition;
+  
+  // Don't draw if off-screen
+  if (x < 0 || x > canvasWidth.value) return;
+  
+  ctx.save();
+  
+  // Draw snap line
+  ctx.strokeStyle = indicator.type === 'grid' ? '#00ff00' : '#00ffff';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.globalAlpha = 0.8;
+  
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, canvasHeight.value);
+  ctx.stroke();
+  
+  ctx.setLineDash([]);
   ctx.restore();
 };
 
@@ -752,62 +810,83 @@ watch(() => timelineStore.panMode, (newPanMode) => {
 });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .timeline-container {
   display: flex;
   flex-direction: column;
-  height: 250px;
-  background: #1a1a1a;
-  border: 1px solid #333;
+  height: 200px;
+  @include d3-window;
+  padding: 2px;
 }
 
 .timeline-header {
   display: flex;
-  height: 30px;
-  background: #2a2a2a;
-  border-bottom: 1px solid #333;
+  height: 24px;
+  @include d3-window;
+  margin-bottom: 2px;
+  padding: 2px;
 }
 
 .time-ruler {
   flex: 1;
-  height: 30px;
-  background: #2a2a2a;
+  height: 20px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
   display: block;
 }
 
 .zoom-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  background: #2a2a2a;
-  border-left: 1px solid #333;
-}
-
-.zoom-controls button {
-  background: #444;
-  border: 1px solid #666;
-  color: white;
-  padding: 4px 8px;
-  cursor: pointer;
-  border-radius: 3px;
-}
-
-.zoom-controls button:hover {
-  background: #555;
-}
-
-.zoom-controls span {
-  color: white;
-  font-size: 12px;
-  min-width: 40px;
-  text-align: center;
+  gap: 4px;
+  padding: 2px 6px;
+  @include d3-window;
+  margin-left: 2px;
+  
+  button {
+    @include d3-object;
+    @include font;
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: 11px;
+    min-width: 20px;
+    
+    &:hover {
+      background: #d0d0d0;
+    }
+    
+    &:active {
+      box-shadow: 1px 1px 0 0 black inset;
+      @include border-shadow('btn-active-shadow');
+      @include border-color-tl('btn-active-border');
+      @include border-color-rb('btn-active-border');
+    }
+  }
+  
+  span {
+    @include font-color('font-color');
+    font-size: 11px;
+    min-width: 40px;
+    text-align: center;
+  }
 }
 
 .timeline-content {
   flex: 1;
   overflow: hidden;
   position: relative;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 canvas {
