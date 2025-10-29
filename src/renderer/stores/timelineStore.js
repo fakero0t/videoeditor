@@ -155,6 +155,12 @@ export const useTimelineStore = (appContext = 'clipforge') => {
     markDirty();
   };
   
+  const setZoomAndScroll = (newZoomLevel, newScrollPosition) => {
+    zoomLevel.value = Math.max(0.1, Math.min(10, newZoomLevel));
+    scrollPosition.value = Math.max(0, newScrollPosition);
+    markDirty();
+  };
+  
   const updateTimelineDuration = () => {
     let maxEndTime = 60; // Minimum 60 seconds
     
@@ -328,6 +334,7 @@ export const useTimelineStore = (appContext = 'clipforge') => {
     setPlayheadPosition,
     setZoomLevel,
     setScrollPosition,
+    setZoomAndScroll,
     updateTimelineDuration,
     markDirty,
     clearDirty,

@@ -441,12 +441,46 @@ const drawSnapIndicator = (ctx) => {
   ctx.restore();
 };
 
-const zoomIn = () => {
-  timelineStore.setZoomLevel(timelineStore.zoomLevel * 1.2);
+const zoomIn = (mouseX = null) => {
+  if (mouseX !== null) {
+    // Zoom around mouse position
+    const mouseTime = (mouseX + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    const newZoomLevel = Math.max(0.1, Math.min(10, timelineStore.zoomLevel * 1.2));
+    
+    if (newZoomLevel !== timelineStore.zoomLevel) {
+      const newPixelsPerSecond = 100 * newZoomLevel;
+      // Calculate ideal scroll position, but allow natural expansion from left edge
+      const idealScrollPosition = mouseTime * newPixelsPerSecond - mouseX;
+      const newScrollPosition = Math.max(0, idealScrollPosition);
+      
+      // Apply changes atomically
+      timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
+    }
+  } else {
+    // Default zoom behavior (zoom around center)
+    timelineStore.setZoomLevel(timelineStore.zoomLevel * 1.2);
+  }
 };
 
-const zoomOut = () => {
-  timelineStore.setZoomLevel(timelineStore.zoomLevel / 1.2);
+const zoomOut = (mouseX = null) => {
+  if (mouseX !== null) {
+    // Zoom around mouse position
+    const mouseTime = (mouseX + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    const newZoomLevel = Math.max(0.1, Math.min(10, timelineStore.zoomLevel / 1.2));
+    
+    if (newZoomLevel !== timelineStore.zoomLevel) {
+      const newPixelsPerSecond = 100 * newZoomLevel;
+      // Calculate ideal scroll position, but allow natural expansion from left edge
+      const idealScrollPosition = mouseTime * newPixelsPerSecond - mouseX;
+      const newScrollPosition = Math.max(0, idealScrollPosition);
+      
+      // Apply changes atomically
+      timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
+    }
+  } else {
+    // Default zoom behavior (zoom around center)
+    timelineStore.setZoomLevel(timelineStore.zoomLevel / 1.2);
+  }
 };
 
 const zoomToFit = () => {
@@ -655,9 +689,32 @@ const handleMouseUp = (event) => {
 const handleWheel = (event) => {
   event.preventDefault();
   if (event.ctrlKey) {
-    // Zoom
-    if (event.deltaY < 0) zoomIn();
-    else zoomOut();
+    // Zoom around mouse position
+    const rect = timelineCanvas.value.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    
+    // Calculate the time position under the mouse cursor before zoom
+    const mouseTime = (mouseX + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+    
+    // Determine zoom direction and factor
+    const zoomFactor = event.deltaY < 0 ? 1.2 : 1 / 1.2;
+    const newZoomLevel = Math.max(0.1, Math.min(10, timelineStore.zoomLevel * zoomFactor));
+    
+    // Only proceed if zoom level actually changed
+    if (newZoomLevel !== timelineStore.zoomLevel) {
+      // Calculate new pixels per second
+      const newPixelsPerSecond = 100 * newZoomLevel;
+      
+      // Calculate ideal scroll position to keep the same time under the mouse cursor
+      const idealScrollPosition = mouseTime * newPixelsPerSecond - mouseX;
+      
+      // If we're near the left edge, allow the right side to expand naturally
+      // by using 0 as the minimum scroll position instead of the ideal position
+      const newScrollPosition = Math.max(0, idealScrollPosition);
+      
+      // Apply changes atomically
+      timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
+    }
   } else {
     // Horizontal scroll
     const newScrollPosition = timelineStore.scrollPosition + event.deltaY;

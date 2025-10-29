@@ -4,6 +4,9 @@
       <BackButton @back="$emit('back')" />
       <h1>ClipForge</h1>
       <ProjectMenu :app-mode="appMode" />
+      <button @click="openExport" :disabled="!canExport" class="export-btn" title="Export Timeline">
+        Export
+      </button>
       <button @click="openRecordingPanel" class="record-toggle-btn" title="Record">
         ● Record
       </button>
@@ -39,11 +42,14 @@
     
     <!-- Recording Panel -->
     <RecordingPanel ref="recordingPanel" :app-mode="appMode" />
+    
+    <!-- Export Dialog -->
+    <ExportDialog :visible="showExport" :app-mode="appMode" @close="showExport = false" />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import BackButton from './BackButton.vue';
 import MediaLibrary from './MediaLibrary.vue';
 import Timeline from './Timeline.vue';
@@ -53,8 +59,13 @@ import TrimInfo from './TrimInfo.vue';
 import SplitButton from './SplitButton.vue';
 import ProjectMenu from './ProjectMenu.vue';
 import RecordingPanel from './RecordingPanel.vue';
+import ExportDialog from './ExportDialog.vue';
 import { useProjectStore } from '../stores/projectStore';
 import { useRecordingStore } from '../stores/recordingStore';
+import { useTimelineStore } from '../stores/timelineStore';
+import { useMediaStore } from '../stores/mediaStore';
+import { PlaybackManager } from '../../shared/playbackManager';
+import { VideoPlayerPool } from '../../shared/videoPlayerPool';
 
 // Props
 const props = defineProps({
@@ -71,9 +82,32 @@ const appVersion = ref('');
 
 const projectStore = useProjectStore(props.appMode);
 const recordingStore = useRecordingStore(props.appMode);
+const timelineStore = useTimelineStore(props.appMode);
+const mediaStore = useMediaStore(props.appMode);
+
+const showExport = ref(false);
+const videoPlayerPool = new VideoPlayerPool();
+let playbackManager = null;
 
 // Make project store globally available for timeline store
 window[`__projectStore_${props.appMode}`] = projectStore;
+
+// Computed property for export button - disabled during save/recording/empty timeline
+const canExport = computed(() => {
+  const hasClips = timelineStore.tracks.some(track => track.clips.length > 0);
+  return hasClips && !projectStore.isSaving && !recordingStore.isRecording;
+});
+
+// Method to open export
+const openExport = () => {
+  if (canExport.value) {
+    // Pause playback if playing
+    if (playbackManager && playbackManager.isPlaying) {
+      playbackManager.pause();
+    }
+    showExport.value = true;
+  }
+};
 
 // Prevent close during save, recording, or with unsaved changes
 window.addEventListener('beforeunload', (e) => {
@@ -97,6 +131,9 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 onMounted(async () => {
+  // Initialize playback manager
+  playbackManager = new PlaybackManager(timelineStore, videoPlayerPool);
+  
   // Update window title
   document.title = 'Forge - ClipForge';
   
@@ -250,6 +287,33 @@ body {
   display: flex;
   gap: 4px;
   align-items: center;
+}
+
+.export-btn {
+  @include d3-object;
+  @include font;
+  padding: 4px 12px;
+  cursor: pointer;
+  font-size: 11px;
+  height: 24px;
+  margin-left: 8px;
+  -webkit-app-region: no-drag;
+  
+  &:hover:not(:disabled) {
+    background: #d0d0d0;
+  }
+  
+  &:active:not(:disabled) {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
+  
+  &:disabled {
+    @include font-color('font-disabled');
+    cursor: not-allowed;
+  }
 }
 
 .record-toggle-btn {

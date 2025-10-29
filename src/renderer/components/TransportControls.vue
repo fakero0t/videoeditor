@@ -33,15 +33,6 @@
       </select>
     </div>
 
-    <button 
-      @click="openExport" 
-      :disabled="!hasClips"
-      class="stop-btn"
-    >
-      Export
-    </button>
-
-    <ExportDialog :visible="showExport" @close="showExport = false" />
   </div>
 </template>
 
@@ -50,7 +41,6 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useTimelineStore } from '../stores/timelineStore';
 import { PlaybackManager } from '../../shared/playbackManager';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
-import ExportDialog from './ExportDialog.vue';
 import PanToggle from './PanToggle.vue';
 
 const timelineStore = useTimelineStore();
@@ -65,7 +55,6 @@ onMounted(() => {
 
 const isPlaying = ref(false);
 const playbackSpeed = ref(1);
-const showExport = ref(false);
 
 const hasClips = computed(() => {
   return timelineStore.tracks.some(track => track.clips.length > 0);
@@ -100,9 +89,6 @@ const updateSpeed = () => {
   playbackManager.setPlaybackSpeed(parseFloat(playbackSpeed.value));
 };
 
-const openExport = () => {
-  showExport.value = true;
-};
 
 const formatTime = (seconds) => {
   const mins = Math.floor(seconds / 60);
@@ -115,11 +101,6 @@ const handleKeyDown = (event) => {
   if (event.code === 'Space' && !event.target.matches('input, textarea, select')) {
     event.preventDefault();
     playPause();
-  }
-  // Cmd/Ctrl+E for Export
-  if ((event.metaKey || event.ctrlKey) && event.code === 'KeyE') {
-    event.preventDefault();
-    if (hasClips.value) openExport();
   }
 };
 

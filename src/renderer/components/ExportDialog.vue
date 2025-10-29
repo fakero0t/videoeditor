@@ -1,60 +1,71 @@
 <template>
-  <div v-if="visible" class="export-backdrop" @click.self="emitClose">
+  <div v-if="visible" class="export-backdrop">
     <div class="export-modal">
-      <h3>Export Timeline</h3>
-
-      <div class="form-row">
-        <label>Resolution</label>
-        <select v-model="resolution">
-          <option value="source">Source</option>
-          <option value="720p">720p</option>
-          <option value="1080p">1080p</option>
-          <option value="1440p">1440p</option>
-          <option value="4k">4K</option>
-        </select>
+      <div class="export-header">
+        <span>Export Timeline</span>
       </div>
-
-      <div class="form-row">
-        <label>FPS</label>
-        <select v-model="fps">
-          <option value="source">Source</option>
-          <option value="30">30</option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <label>Quality</label>
-        <select v-model="quality">
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="ultra">Ultra</option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <label>Output</label>
-        <div class="output-row">
-          <input type="text" v-model="outputPath" readonly placeholder="Choose output file..." />
-          <button @click="chooseOutput" :disabled="exporting">Browse</button>
+      
+      <div class="export-content">
+        <div class="form-row">
+          <label>Resolution:</label>
+          <select v-model="resolution">
+            <option value="source">Source</option>
+            <option value="720p" :disabled="!resolutionAvailable('720p')">720p</option>
+            <option value="1080p" :disabled="!resolutionAvailable('1080p')">1080p</option>
+            <option value="1440p" :disabled="!resolutionAvailable('1440p')">1440p</option>
+            <option value="4k" :disabled="!resolutionAvailable('4k')">4K</option>
+          </select>
         </div>
-      </div>
 
-      <div v-if="error" class="error">{{ error }}</div>
+        <div class="form-row">
+          <label>FPS:</label>
+          <select v-model="fps">
+            <option value="source">Source</option>
+            <option value="30">30</option>
+          </select>
+        </div>
 
-      <div v-if="exporting" class="progress">
-        <div class="bar"><div class="fill" :style="{ width: progressPercent + '%' }"></div></div>
-        <div class="meta">{{ progressPercent }}% • {{ progress.fps ? progress.fps + ' fps' : '' }} {{ progress.currentTime || '' }}</div>
-      </div>
+        <div class="form-row">
+          <label>Quality:</label>
+          <select v-model="quality">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="ultra">Ultra</option>
+          </select>
+        </div>
 
-      <div class="actions">
-        <button @click="startExport" :disabled="!canStart || exporting">Start Export</button>
-        <button @click="cancelExport" v-if="exporting" class="danger">Cancel</button>
-        <button @click="emitClose" :disabled="exporting">Close</button>
+        <div class="form-row">
+          <label>Output:</label>
+          <div class="output-row">
+            <input type="text" v-model="outputPath" readonly placeholder="Choose output file..." />
+            <button @click="chooseOutput" :disabled="exporting">Browse...</button>
+          </div>
+        </div>
+
+        <div v-if="error" class="error-message">{{ error }}</div>
+        <div v-if="exportSuccess" class="success-message">Export completed successfully!</div>
+
+        <div v-if="exporting" class="progress-section">
+          <div class="progress-label">Exporting...</div>
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+          </div>
+          <div class="progress-text">
+            {{ progressPercent }}% • {{ progress.fps ? progress.fps + ' fps' : '' }} {{ progress.currentTime || '' }}
+          </div>
+        </div>
+
+        <div class="actions">
+          <button @click="startExport" :disabled="!canStart || exporting || exportSuccess" class="primary-btn">
+            {{ exporting ? 'Exporting...' : 'Start Export' }}
+          </button>
+          <button @click="cancelExport" v-if="exporting" class="cancel-btn">Cancel</button>
+          <button @click="emitClose">Close</button>
+        </div>
       </div>
     </div>
   </div>
-  
 </template>
 
 <script setup>
@@ -64,11 +75,12 @@ import ffmpegService from '../../shared/ffmpegService';
 import { buildExportPlan } from '../services/exportAssembler';
 
 const props = defineProps({
-  visible: { type: Boolean, default: false }
+  visible: { type: Boolean, default: false },
+  appMode: { type: String, default: 'clipforge' }
 });
 const emit = defineEmits(['close']);
 
-const timelineStore = useTimelineStore();
+const timelineStore = useTimelineStore(props.appMode);
 
 const resolution = ref('source');
 const fps = ref('source');
@@ -78,17 +90,63 @@ const exporting = ref(false);
 const progress = ref({ percent: 0, currentTime: '', fps: 0 });
 const unsubscribe = ref(null);
 const error = ref('');
+const exportSuccess = ref(false);
+const maxResolution = ref({ width: Infinity, height: Infinity });
 
 const hasClips = computed(() => timelineStore.tracks.some(t => t.clips.length > 0));
 const canStart = computed(() => hasClips.value && !!outputPath.value);
 const progressPercent = computed(() => Math.max(0, Math.min(100, progress.value.percent || 0)));
 
-watch(() => props.visible, (v) => {
-  if (!v) {
-    // reset UI state when hidden
+// Compute available resolutions based on timeline clips
+const resolutionAvailable = (resOption) => {
+  if (resOption === 'source') return true;
+  
+  const resMap = {
+    '720p': { width: 1280, height: 720 },
+    '1080p': { width: 1920, height: 1080 },
+    '1440p': { width: 2560, height: 1440 },
+    '4k': { width: 3840, height: 2160 }
+  };
+  
+  const targetRes = resMap[resOption];
+  if (!targetRes) return true;
+  
+  // Check if this resolution exceeds max available
+  return targetRes.width <= maxResolution.value.width;
+};
+
+// Calculate max resolution on mount and when visible changes
+watch(() => props.visible, async (isVisible) => {
+  if (isVisible) {
+    // Reset state
+    exportSuccess.value = false;
+    error.value = '';
+    
+    // Calculate max resolution from timeline
+    let lowestWidth = Infinity;
+    let lowestHeight = Infinity;
+    
+    for (const track of timelineStore.tracks) {
+      for (const clip of track.clips) {
+        if (clip.width && clip.height) {
+          if (clip.width < lowestWidth) {
+            lowestWidth = clip.width;
+            lowestHeight = clip.height;
+          }
+        }
+      }
+    }
+    
+    maxResolution.value = {
+      width: lowestWidth === Infinity ? 3840 : lowestWidth,
+      height: lowestHeight === Infinity ? 2160 : lowestHeight
+    };
+  } else {
+    // Reset UI state when hidden
     exporting.value = false;
     progress.value = { percent: 0, currentTime: '', fps: 0 };
     error.value = '';
+    exportSuccess.value = false;
     if (unsubscribe.value) {
       unsubscribe.value();
       unsubscribe.value = null;
@@ -110,6 +168,7 @@ const chooseOutput = async () => {
 const startExport = async () => {
   if (!canStart.value) return;
   error.value = '';
+  exportSuccess.value = false;
   exporting.value = true;
   try {
     await window.electronAPI.setPreventQuit(true);
@@ -131,8 +190,34 @@ const startExport = async () => {
     if (!result || !result.success) {
       throw new Error('Export failed');
     }
+    
+    // Show success message, let user close
+    progress.value.percent = 100;
+    exportSuccess.value = true;
+    
   } catch (e) {
-    error.value = e?.message || String(e);
+    console.error('Export error:', e);
+    
+    // User-friendly error messages
+    let errorMsg = 'Could not export video. Please check your output location and try again.';
+    
+    if (e?.message?.includes('ENOSPC') || e?.message?.includes('disk space')) {
+      errorMsg = 'Not enough disk space. Please free up space and try again.';
+    } else if (e?.message?.includes('EACCES') || e?.message?.includes('permission')) {
+      errorMsg = 'Permission denied. Please choose a different output location.';
+    } else if (e?.message?.includes('ENOENT') || e?.message?.includes('not found')) {
+      errorMsg = 'Output location not found. Please choose a valid folder.';
+    } else if (e?.message?.includes('codec') || e?.message?.includes('format')) {
+      errorMsg = 'Video format error. Please ensure your clips are valid video files.';
+    } else if (e?.message?.includes('cancel')) {
+      errorMsg = 'Export cancelled.';
+    } else if (e?.message) {
+      // Use the actual error message if available
+      errorMsg = e.message;
+    }
+    
+    error.value = errorMsg;
+    
   } finally {
     exporting.value = false;
     if (unsubscribe.value) {
@@ -163,11 +248,15 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .export-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -175,102 +264,207 @@ onUnmounted(() => {
 }
 
 .export-modal {
+  @include d3-window;
   width: 420px;
-  background: #1f1f1f;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 16px;
-  color: #fff;
+  background: #c0c0c0;
+  padding: 2px;
 }
 
-.export-modal h3 {
-  margin: 0 0 12px 0;
+.export-header {
+  @include d3-window;
+  background: linear-gradient(90deg, #000080, #1084d0);
+  color: white;
+  padding: 4px 8px;
+  font-weight: bold;
+  font-size: 11px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.export-content {
+  padding: 12px 8px 8px 8px;
 }
 
 .form-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   margin-bottom: 10px;
 }
 
 .form-row label {
-  color: #ccc;
+  @include font-color('font-color');
+  font-size: 11px;
+  min-width: 70px;
+  text-align: right;
 }
 
-select, input[type="text"] {
-  background: #2a2a2a;
-  border: 1px solid #444;
-  color: #fff;
-  padding: 6px 8px;
-  border-radius: 4px;
-  width: 220px;
+select {
+  @include background-color('inputs-bg');
+  @include font-color('font-color');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  padding: 3px 4px;
+  font-size: 11px;
+  font-family: $font-family;
+  cursor: pointer;
+  flex: 1;
+  
+  &:focus {
+    outline: 1px dotted #000;
+    outline-offset: -2px;
+  }
+  
+  &:disabled {
+    @include font-color('font-disabled');
+    cursor: not-allowed;
+  }
+}
+
+input[type="text"] {
+  @include background-color('inputs-bg');
+  @include font-color('font-color');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  padding: 3px 4px;
+  font-size: 11px;
+  font-family: $font-family;
+  flex: 1;
+  
+  &:focus {
+    outline: 1px dotted #000;
+    outline-offset: -2px;
+  }
 }
 
 .output-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 4px;
+  flex: 1;
 }
 
-.output-row input {
-  flex: 1;
+.error-message {
+  @include background-color('inputs-bg');
+  border: 1px solid #cc0000;
+  padding: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: #cc0000;
+  
+  &::before {
+    content: '⚠ ';
+  }
+}
+
+.success-message {
+  @include background-color('inputs-bg');
+  border: 1px solid #008000;
+  padding: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: #008000;
+  
+  &::before {
+    content: '✓ ';
+  }
+}
+
+.progress-section {
+  margin: 12px 0;
+  padding: 8px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include background-color('inputs-bg');
+}
+
+.progress-label {
+  @include font-color('font-color');
+  font-size: 11px;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.progress-bar {
+  height: 20px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  background: white;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-fill {
+  height: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    #000080,
+    #000080 10px,
+    #1084d0 10px,
+    #1084d0 20px
+  );
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.progress-text {
+  @include font-color('font-color');
+  font-size: 11px;
+  margin-top: 4px;
+  font-family: 'Courier New', monospace;
+  text-align: center;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 4px;
   margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid;
+  @include border-color-tl('content-border-left');
 }
 
 button {
-  background: #007acc;
-  color: #fff;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 4px;
+  @include d3-object;
+  @include font;
+  padding: 4px 12px;
   cursor: pointer;
+  font-size: 11px;
+  min-width: 75px;
+  height: 24px;
+  
+  &:hover:not(:disabled) {
+    background: #d0d0d0;
+  }
+  
+  &:active:not(:disabled) {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
+  
+  &:disabled {
+    @include font-color('font-disabled');
+    cursor: not-allowed;
+  }
 }
 
-button:disabled {
-  background: #555;
-  cursor: not-allowed;
+.primary-btn {
+  font-weight: bold;
 }
 
-button.danger {
-  background: #ef4444;
-}
-
-.progress {
-  margin-top: 10px;
-}
-
-.bar {
-  height: 10px;
-  background: #333;
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.fill {
-  height: 10px;
-  background: #22c55e;
-  width: 0%;
-}
-
-.meta {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #ccc;
-}
-
-.error {
-  color: #f87171;
-  font-size: 12px;
-  margin-bottom: 8px;
+.cancel-btn {
+  // Uses default button styling
 }
 </style>
 

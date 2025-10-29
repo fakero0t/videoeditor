@@ -70,25 +70,60 @@ function buildInputMap(tracks) {
 }
 
 async function deriveGraphDimensionsAndFps(tracks, options) {
-  // Resolution
+  // Find the lowest resolution among all clips on timeline
+  let lowestWidth = Infinity;
+  let lowestHeight = Infinity;
+  
+  for (const track of tracks) {
+    for (const clip of track.clips) {
+      if (clip.width && clip.height) {
+        if (clip.width < lowestWidth) {
+          lowestWidth = clip.width;
+          lowestHeight = clip.height;
+        }
+      } else {
+        // If clip doesn't have dimensions stored, try to get them from ffprobe
+        try {
+          const info = await ffmpegService.getVideoInfo(clip.filePath);
+          if (info && info.width && info.height) {
+            if (info.width < lowestWidth) {
+              lowestWidth = info.width;
+              lowestHeight = info.height;
+            }
+          }
+        } catch (_) {
+          // Skip if can't get info
+        }
+      }
+    }
+  }
+  
+  // Default if no clips have resolution info
+  if (lowestWidth === Infinity) {
+    lowestWidth = 1920;
+    lowestHeight = 1080;
+  }
+
+  // Resolution handling
   let width = 1920;
   let height = 1080;
+  
   if (options.resolution && options.resolution !== 'source') {
     const res = RESOLUTION_MAP[options.resolution];
     if (res) {
       width = res.width;
       height = res.height;
     }
-  } else {
-    // Try to use first clip's stored dimensions if present
-    for (const track of tracks) {
-      const clip = track.clips[0];
-      if (clip && clip.width && clip.height) {
-        width = clip.width;
-        height = clip.height;
-        break;
-      }
+    
+    // Cap to lowest clip resolution - don't upscale
+    if (width > lowestWidth) {
+      width = lowestWidth;
+      height = lowestHeight;
     }
+  } else {
+    // Use lowest clip resolution as source
+    width = lowestWidth;
+    height = lowestHeight;
   }
 
   // FPS for graph sources (color/anullsrc)

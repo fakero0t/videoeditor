@@ -30,10 +30,10 @@ This task list implements the Export button functionality as outlined in `export
           <label>Resolution:</label>
           <select v-model="resolution">
             <option value="source">Source</option>
-            <option value="720p">720p</option>
-            <option value="1080p">1080p</option>
-            <option value="1440p">1440p</option>
-            <option value="4k">4K</option>
+            <option value="720p" :disabled="!resolutionAvailable('720p')">720p</option>
+            <option value="1080p" :disabled="!resolutionAvailable('1080p')">1080p</option>
+            <option value="1440p" :disabled="!resolutionAvailable('1440p')">1440p</option>
+            <option value="4k" :disabled="!resolutionAvailable('4k')">4K</option>
           </select>
         </div>
 
@@ -64,6 +64,7 @@ This task list implements the Export button functionality as outlined in `export
         </div>
 
         <div v-if="error" class="error-message">{{ error }}</div>
+        <div v-if="exportSuccess" class="success-message">Export completed successfully!</div>
 
         <div v-if="exporting" class="progress-section">
           <div class="progress-label">Exporting...</div>
@@ -76,16 +77,77 @@ This task list implements the Export button functionality as outlined in `export
         </div>
 
         <div class="actions">
-          <button @click="startExport" :disabled="!canStart || exporting" class="primary-btn">
+          <button @click="startExport" :disabled="!canStart || exporting || exportSuccess" class="primary-btn">
             {{ exporting ? 'Exporting...' : 'Start Export' }}
           </button>
           <button @click="cancelExport" v-if="exporting" class="cancel-btn">Cancel</button>
-          <button @click="emitClose" :disabled="exporting">Close</button>
+          <button @click="emitClose">Close</button>
         </div>
       </div>
     </div>
   </div>
 </template>
+```
+
+**Script Section - Add Props and Resolution Logic**:
+```javascript
+const props = defineProps({
+  visible: { type: Boolean, default: false },
+  appMode: { type: String, default: 'clipforge' } // ADD THIS PROP
+});
+
+const timelineStore = useTimelineStore(props.appMode); // PASS appMode
+
+// Add these new refs
+const exportSuccess = ref(false);
+const maxResolution = ref({ width: Infinity, height: Infinity });
+
+// Compute available resolutions based on timeline clips
+const resolutionAvailable = (resOption) => {
+  if (resOption === 'source') return true;
+  
+  const resMap = {
+    '720p': { width: 1280, height: 720 },
+    '1080p': { width: 1920, height: 1080 },
+    '1440p': { width: 2560, height: 1440 },
+    '4k': { width: 3840, height: 2160 }
+  };
+  
+  const targetRes = resMap[resOption];
+  if (!targetRes) return true;
+  
+  // Check if this resolution exceeds max available
+  return targetRes.width <= maxResolution.value.width;
+};
+
+// Calculate max resolution on mount and when visible changes
+watch(() => props.visible, async (isVisible) => {
+  if (isVisible) {
+    // Reset state
+    exportSuccess.value = false;
+    error.value = '';
+    
+    // Calculate max resolution from timeline
+    let lowestWidth = Infinity;
+    let lowestHeight = Infinity;
+    
+    for (const track of timelineStore.tracks) {
+      for (const clip of track.clips) {
+        if (clip.width && clip.height) {
+          if (clip.width < lowestWidth) {
+            lowestWidth = clip.width;
+            lowestHeight = clip.height;
+          }
+        }
+      }
+    }
+    
+    maxResolution.value = {
+      width: lowestWidth === Infinity ? 3840 : lowestWidth,
+      height: lowestHeight === Infinity ? 2160 : lowestHeight
+    };
+  }
+});
 ```
 
 **Style Section - Replace Entire `<style scoped>` Block**:
@@ -196,6 +258,19 @@ input[type="text"] {
   
   &::before {
     content: '⚠ ';
+  }
+}
+
+.success-message {
+  @include background-color('inputs-bg');
+  border: 1px solid #008000;
+  padding: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: #008000;
+  
+  &::before {
+    content: '✓ ';
   }
 }
 
@@ -324,11 +399,9 @@ const startExport = async () => {
       throw new Error('Export failed');
     }
     
-    // Show success briefly before closing
+    // Show success message, let user close
     progress.value.percent = 100;
-    setTimeout(() => {
-      emitClose();
-    }, 1000);
+    exportSuccess.value = true;
     
   } catch (e) {
     console.error('Export error:', e);
@@ -477,7 +550,7 @@ import ffmpegService from '../../shared/ffmpegService';
   <BackButton @back="$emit('back')" />
   <h1>ClipForge</h1>
   <ProjectMenu :app-mode="appMode" />
-  <button @click="openExport" :disabled="!hasClips" class="export-btn" title="Export Timeline (Ctrl+E)">
+  <button @click="openExport" :disabled="!canExport" class="export-btn" title="Export Timeline">
     Export
   </button>
   <button @click="openRecordingPanel" class="record-toggle-btn" title="Record">
@@ -492,7 +565,7 @@ import ffmpegService from '../../shared/ffmpegService';
 <RecordingPanel ref="recordingPanel" :app-mode="appMode" />
 
 <!-- Export Dialog -->
-<ExportDialog :visible="showExport" @close="showExport = false" />
+<ExportDialog :visible="showExport" :app-mode="appMode" @close="showExport = false" />
 ```
 
 **Script Update - Add imports** (after line 56):
@@ -512,49 +585,31 @@ const timelineStore = useTimelineStore(props.appMode); // ADD THIS
 const mediaStore = useMediaStore(props.appMode); // ADD THIS
 
 const showExport = ref(false); // ADD THIS
+let playbackManager = null; // Should already exist
 
-// Computed property for export button
-const hasClips = computed(() => {
-  return timelineStore.tracks.some(track => track.clips.length > 0);
+// Computed property for export button - disabled during save/recording/empty timeline
+const canExport = computed(() => {
+  const hasClips = timelineStore.tracks.some(track => track.clips.length > 0);
+  return hasClips && !projectStore.isSaving && !recordingStore.isRecording;
 });
 
 // Method to open export
 const openExport = () => {
-  if (hasClips.value) {
+  if (canExport.value) {
+    // Pause playback if playing
+    if (playbackManager && playbackManager.isPlaying) {
+      playbackManager.pause();
+    }
     showExport.value = true;
   }
 };
 ```
 
-**Script Update - Add keyboard shortcut** (in the onMounted section, around line 99):
+**Script Update - Initialize playbackManager** (should already exist around line 62):
 ```javascript
-onMounted(async () => {
-  // Update window title
-  document.title = 'Forge - ClipForge';
-  
-  if (window.electronAPI) {
-    appVersion.value = await window.electronAPI.getVersion();
-  }
-
-  // Keyboard shortcut for export
-  const handleKeyDown = (event) => {
-    if ((event.metaKey || event.ctrlKey) && event.code === 'KeyE') {
-      event.preventDefault();
-      if (hasClips.value) openExport();
-    }
-  };
-  document.addEventListener('keydown', handleKeyDown);
-
-  // Listen for quit request during recording
-  const unsubscribeRecordingQuit = window.electronAPI.onQuitRequestedDuringRecording(async () => {
-    // ... existing code ...
-  });
-
-  // Cleanup on unmount
-  onUnmounted(() => {
-    document.removeEventListener('keydown', handleKeyDown); // ADD THIS
-    unsubscribeRecordingQuit();
-  });
+onMounted(() => {
+  playbackManager = new PlaybackManager(timelineStore, videoPlayerPool);
+  // ... rest of existing onMounted code
 });
 ```
 
@@ -635,13 +690,15 @@ const openExport = () => {
 
 **Remove Keyboard Shortcut** (lines 119-123):
 ```javascript
-// DELETE THIS SECTION:
+// DELETE THIS SECTION (keyboard shortcut not needed):
 // Cmd/Ctrl+E for Export
 if ((event.metaKey || event.ctrlKey) && event.code === 'KeyE') {
   event.preventDefault();
   if (hasClips.value) openExport();
 }
 ```
+
+**Note**: No keyboard shortcuts are being added in PR #2.
 
 ---
 
@@ -653,19 +710,25 @@ if ((event.metaKey || event.ctrlKey) && event.code === 'KeyE') {
 - [ ] Form controls match existing app styling
 - [ ] Error messages are user-friendly and specific
 - [ ] Resolution capping works: selecting "Source" uses lowest clip resolution
-- [ ] Preset resolutions (720p, 1080p, etc.) don't exceed lowest clip resolution
+- [ ] Preset resolutions exceeding lowest clip are disabled in dropdown
 - [ ] Dialog header has gradient blue background
 - [ ] All buttons use d3-object styling
+- [ ] Export success shows "Export completed successfully!" message
+- [ ] User can close dialog after success (doesn't auto-close)
+- [ ] ExportDialog receives appMode prop and passes it to timelineStore
 
 ### PR #2
 - [ ] Export button appears in top header next to ProjectMenu
 - [ ] Export button disabled when timeline is empty
-- [ ] Export button enabled when clips are on timeline
+- [ ] Export button disabled during project save (projectStore.isSaving)
+- [ ] Export button disabled during active recording (recordingStore.isRecording)
+- [ ] Export button enabled when clips are on timeline and not saving/recording
 - [ ] Clicking Export button opens dialog
-- [ ] Cmd/Ctrl+E keyboard shortcut works in editors
+- [ ] Clicking Export button auto-pauses playback if playing
 - [ ] Export button has proper styling matching other header buttons
 - [ ] Export button works in both ClipForge and VoiceForge
 - [ ] No export button in TransportControls
+- [ ] No keyboard shortcuts added
 - [ ] No console errors or warnings
 
 ## Testing Notes
@@ -687,9 +750,11 @@ if ((event.metaKey || event.ctrlKey) && event.code === 'KeyE') {
    - Test error scenarios (invalid path, disk full if possible)
    - Verify error messages are user-friendly
 
-3. **Keyboard Shortcut**:
-   - Press Cmd/Ctrl+E with empty timeline (should do nothing)
-   - Press Cmd/Ctrl+E with clips (should open dialog)
+3. **Button State Testing**:
+   - Export button disabled with empty timeline
+   - Export button disabled during project save
+   - Export button disabled during active recording
+   - Clicking Export auto-pauses video playback
 
 4. **Cross-Editor Testing**:
    - Test in ClipForge editor
@@ -707,5 +772,11 @@ if ((event.metaKey || event.ctrlKey) && event.code === 'KeyE') {
 - No emoji in Export button, text only
 - Dialog width stays at 420px
 - Resolution capping prevents upscaling beyond lowest timeline clip
+- Resolutions exceeding lowest clip are disabled in dropdown
 - Error messages should guide users to solutions
+- Export button disabled during save/recording operations
+- Playback auto-pauses when export dialog opens
+- Success message displayed, user manually closes dialog
+- No keyboard shortcuts for export
+- ExportDialog receives appMode prop and uses it for timelineStore
 
