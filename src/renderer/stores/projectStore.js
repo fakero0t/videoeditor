@@ -2,7 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { ProjectService } from '../../shared/projectService';
 
-export const useProjectStore = defineStore('project', () => {
+export const useProjectStore = (appContext = 'clipforge') => {
+  return defineStore(`${appContext}-project`, () => {
   // State
   const currentProjectPath = ref(null);
   const currentProjectName = ref(null);
@@ -65,4 +66,5 @@ export const useProjectStore = defineStore('project', () => {
     clearProject,
     setSaveProgress
   };
-});
+  })();
+};

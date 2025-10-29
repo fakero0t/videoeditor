@@ -2,7 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { generateId } from '../../shared/utils/videoUtils';
 
-export const useTimelineStore = defineStore('timeline', () => {
+export const useTimelineStore = (appContext = 'clipforge') => {
+  return defineStore(`${appContext}-timeline`, () => {
   // State
   const tracks = ref([
     { id: 'track-1', name: 'Track 1', clips: [], height: 100 },
@@ -157,8 +158,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     isDirty.value = true;
     
     // Notify project store if it exists
-    if (window.__projectStore) {
-      window.__projectStore.markDirty();
+    if (window.__projectStore_clipforge) {
+      window.__projectStore_clipforge.markDirty();
     }
   };
   
@@ -301,7 +302,8 @@ export const useTimelineStore = defineStore('timeline', () => {
     deserialize,
     markClipChanged
   };
-});
+  })();
+};
 
 // Helper function to generate clip colors
 function generateClipColor(index) {

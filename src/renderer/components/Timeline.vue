@@ -44,8 +44,16 @@ import TrimManager from '../../shared/trimManager';
 import TrimHandleRenderer from '../../shared/trimHandleRenderer';
 import SplitManager from '../../shared/splitManager';
 
-const timelineStore = useTimelineStore();
-const mediaStore = useMediaStore();
+// Props
+const props = defineProps({
+  appMode: {
+    type: String,
+    required: true
+  }
+});
+
+const timelineStore = useTimelineStore(props.appMode);
+const mediaStore = useMediaStore(props.appMode);
 const timelineCanvas = ref(null);
 const timeRuler = ref(null);
 const timelineContent = ref(null);

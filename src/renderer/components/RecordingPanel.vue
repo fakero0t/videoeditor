@@ -10,6 +10,7 @@
     
     <div class="panel-tabs">
       <button 
+        v-if="props.appMode === 'clipforge'"
         @click="currentTab = 'screen'" 
         :class="{ active: currentTab === 'screen' }"
         class="tab-btn"
@@ -17,6 +18,7 @@
         🖥️ Screen
       </button>
       <button 
+        v-if="props.appMode === 'clipforge'"
         @click="currentTab = 'webcam'" 
         :class="{ active: currentTab === 'webcam' }"
         class="tab-btn"
@@ -24,6 +26,7 @@
         📹 Webcam
       </button>
       <button 
+        v-if="props.appMode === 'clipforge'"
         @click="currentTab = 'composite'" 
         :class="{ active: currentTab === 'composite' }"
         class="tab-btn"
@@ -32,29 +35,56 @@
       >
         🎬 Screen + Webcam
       </button>
+      <button 
+        v-if="props.appMode === 'voiceforge'"
+        @click="currentTab = 'microphone'" 
+        :class="{ active: currentTab === 'microphone' }"
+        class="tab-btn"
+      >
+        🎙️ Microphone
+      </button>
     </div>
     
     <!-- Screen Recording Tab -->
     <div v-if="currentTab === 'screen'" class="tab-content">
       <div class="source-selection">
         <label>Screen/Window Source:</label>
-        <select 
-          v-model="recordingStore.selectedScreenSource" 
-          @change="refreshPreview"
-          :disabled="recordingStore.isRecording"
-        >
-          <option :value="null">Select a source...</option>
-          <option 
-            v-for="source in recordingStore.availableScreenSources" 
-            :key="source.id"
-            :value="source"
-          >
-            {{ source.name }} ({{ source.type }})
-          </option>
-        </select>
-        <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
-          🔄 Refresh
-        </button>
+        <div class="source-list-container">
+          <div class="source-list-header">
+            <span class="source-count">{{ recordingStore.availableScreenSources.length }} sources</span>
+            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+              Refresh
+            </button>
+          </div>
+          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
+            <div 
+              v-if="recordingStore.availableScreenSources.length === 0"
+              class="no-sources"
+            >
+              No sources available
+            </div>
+            <div 
+              v-for="source in recordingStore.availableScreenSources" 
+              :key="source.id"
+              @click="selectScreenSource(source)"
+              :class="{ 
+                'source-item': true, 
+                'selected': recordingStore.selectedScreenSource?.id === source.id,
+                'disabled': recordingStore.isRecording
+              }"
+            >
+              <div class="source-icon">
+                <span v-if="source.type === 'screen'">🖥️</span>
+                <span v-else-if="source.type === 'window'">🪟</span>
+                <span v-else>📄</span>
+              </div>
+              <div class="source-info">
+                <div class="source-name">{{ source.name }}</div>
+                <div class="source-type">{{ source.type }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       
       <div v-if="recordingStore.selectedScreenSource" class="preview-container">
@@ -143,36 +173,46 @@
           Check Permissions
         </button>
       </div>
-        <button 
-          @click="debugPermissions" 
-          class="debug-btn"
-          style="padding: 8px 12px; font-size: 12px; background: #666; color: white; border: none; border-radius: 4px; margin-left: 8px;"
-        >
-          Debug
-        </button>
       </div>
       
       <!-- Webcam Recording Tab -->
     <div v-if="currentTab === 'webcam'" class="tab-content">
       <div class="source-selection">
         <label>Webcam:</label>
-        <select 
-          v-model="recordingStore.selectedWebcamSource" 
-          @change="startWebcamPreview"
-          :disabled="recordingStore.isRecording"
-        >
-          <option :value="null">Select a webcam...</option>
-          <option 
-            v-for="cam in recordingStore.availableWebcamSources" 
-            :key="cam.deviceId"
-            :value="cam"
-          >
-            {{ cam.label }}
-          </option>
-        </select>
-        <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
-          🔄 Refresh
-        </button>
+        <div class="source-list-container">
+          <div class="source-list-header">
+            <span class="source-count">{{ recordingStore.availableWebcamSources.length }} webcams</span>
+            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+              Refresh
+            </button>
+          </div>
+          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
+            <div 
+              v-if="recordingStore.availableWebcamSources.length === 0"
+              class="no-sources"
+            >
+              No webcams available
+            </div>
+            <div 
+              v-for="cam in recordingStore.availableWebcamSources" 
+              :key="cam.deviceId"
+              @click="selectWebcamSource(cam)"
+              :class="{ 
+                'source-item': true, 
+                'selected': recordingStore.selectedWebcamSource?.deviceId === cam.deviceId,
+                'disabled': recordingStore.isRecording
+              }"
+            >
+              <div class="source-icon">
+                <span>📹</span>
+              </div>
+              <div class="source-info">
+                <div class="source-name">{{ cam.label }}</div>
+                <div class="source-type">webcam</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       
       <div v-if="recordingStore.selectedWebcamSource" class="preview-container">
@@ -260,6 +300,85 @@
         </button>
       </div>
     </div>
+    
+    <!-- Microphone Only Recording Tab (VoiceForge) -->
+    <div v-if="currentTab === 'microphone'" class="tab-content">
+      <div class="recording-options">
+        <div class="option-group">
+          <label>Microphone:</label>
+          <select 
+            v-model="recordingStore.selectedMicrophoneSource"
+            :disabled="recordingStore.isRecording"
+          >
+            <option :value="null">Select a microphone...</option>
+            <option 
+              v-for="mic in recordingStore.availableMicrophoneSources"
+              :key="mic.deviceId"
+              :value="mic"
+            >
+              {{ mic.label }}
+            </option>
+          </select>
+        </div>
+        
+        <div v-if="recordingStore.selectedMicrophoneSource" class="option-group">
+          <label>Audio Level:</label>
+          <div class="audio-level-meter">
+            <div 
+              class="audio-level-bar" 
+              :style="{ width: recordingStore.audioLevel + '%', backgroundColor: getAudioLevelColor(recordingStore.audioLevel) }"
+            ></div>
+          </div>
+          <span class="audio-level-text">{{ Math.round(recordingStore.audioLevel) }}%</span>
+        </div>
+        
+        <div class="option-group">
+          <label>Quality:</label>
+          <select 
+            v-model="recordingStore.recordingQuality"
+            :disabled="recordingStore.isRecording"
+          >
+            <option value="high">High (48kHz)</option>
+            <option value="medium">Medium (44.1kHz)</option>
+            <option value="low">Low (22kHz)</option>
+          </select>
+        </div>
+      </div>
+      
+      <div v-if="recordingStore.diskSpaceWarning" class="warning-message">
+        ⚠️ Low disk space (< 5GB available). Recording may fail.
+      </div>
+      
+      <div v-if="recordingStore.selectedMicrophoneSource && !recordingStore.hasMicrophonePermission" class="warning-message">
+        ⚠️ Microphone permission required for audio recording.
+      </div>
+      
+      <div class="recording-controls">
+        <button 
+          v-if="!recordingStore.isRecording"
+          @click="startMicrophoneRecording"
+          :disabled="!canRecordMicrophone"
+          class="record-btn"
+        >
+          🎙️ Start Recording
+        </button>
+        <button 
+          v-else
+          @click="stopRecording"
+          class="stop-btn"
+        >
+          ■ Stop Recording
+        </button>
+        
+        <button 
+          v-if="!recordingStore.permissionsChecked"
+          @click="showPermissionCheck"
+          class="secondary-btn"
+        >
+          Check Permissions
+        </button>
+      </div>
+    </div>
   </div>
   
   <!-- Recording Widget (shown when minimized during recording) -->
@@ -287,12 +406,20 @@ import { ScreenRecorder } from '../../shared/screenRecorder';
 import RecordingWidget from './RecordingWidget.vue';
 import PermissionModal from './PermissionModal.vue';
 
-const recordingStore = useRecordingStore();
-const mediaStore = useMediaStore();
+// Props
+const props = defineProps({
+  appMode: {
+    type: String,
+    default: 'clipforge'
+  }
+});
+
+const recordingStore = useRecordingStore(props.appMode);
+const mediaStore = useMediaStore(props.appMode);
 
 const isPanelOpen = ref(false);
 const isWidgetVisible = ref(false);
-const currentTab = ref('screen');
+const currentTab = ref(props.appMode === 'voiceforge' ? 'microphone' : 'screen');
 const showPermissionModal = ref(false);
 
 // Webcam preview
@@ -317,6 +444,13 @@ const canRecordWebcam = computed(() => {
   return !recordingStore.isRecording &&
          recordingStore.selectedWebcamSource !== null &&
          recordingStore.hasRequiredPermissions &&
+         recordingStore.hasEnoughDiskSpace;
+});
+
+const canRecordMicrophone = computed(() => {
+  return !recordingStore.isRecording &&
+         recordingStore.selectedMicrophoneSource !== null &&
+         recordingStore.hasMicrophonePermission &&
          recordingStore.hasEnoughDiskSpace;
 });
 
@@ -574,6 +708,19 @@ const refreshSources = async () => {
 
 const refreshPreview = () => {
   // Preview is shown via thumbnail from source selection
+};
+
+// Source selection methods
+const selectScreenSource = (source) => {
+  if (recordingStore.isRecording) return;
+  recordingStore.setSelectedScreenSource(source);
+  refreshPreview();
+};
+
+const selectWebcamSource = (cam) => {
+  if (recordingStore.isRecording) return;
+  recordingStore.setSelectedWebcamSource(cam);
+  startWebcamPreview();
 };
 
 // Recording controls
@@ -854,6 +1001,62 @@ const startWebcamRecording = async () => {
   }
 };
 
+const startMicrophoneRecording = async () => {
+  try {
+    // Force a fresh permission check before recording
+    await checkPermissionsSilently();
+    
+    // Check permissions
+    if (!recordingStore.hasMicrophonePermission) {
+      console.error('Microphone permission not granted - cannot start recording');
+      showPermissionModal.value = true;
+      return;
+    }
+    
+    // Check disk space
+    const diskSpace = await screenRecorder.checkDiskSpace();
+    if (diskSpace < 5 * 1024 * 1024 * 1024) {
+      alert('Insufficient disk space. Need at least 5GB available.');
+      return;
+    }
+    
+    // Notify main process
+    await window.electronAPI.recording.setRecordingState(true);
+    
+    // Start recording
+    const recordingId = 'rec_' + Date.now();
+    await screenRecorder.startMicrophoneRecording(
+      recordingStore.selectedMicrophoneSource,
+      recordingStore.recordingQuality,
+      {
+        onStart: () => {
+          recordingStore.startRecording('microphone', recordingId);
+          minimizePanel();
+        },
+        onProgress: (duration) => {
+          recordingStore.updateDuration(duration);
+        },
+        onAudioLevel: (level) => {
+          recordingStore.updateAudioLevel(level);
+        },
+        onComplete: async (filePath) => {
+          await handleRecordingComplete(filePath);
+        },
+        onError: async (error) => {
+          console.error('Recording error:', error);
+          recordingStore.setError(error.message);
+          recordingStore.stopRecording();
+          await window.electronAPI.recording.setRecordingState(false);
+        }
+      }
+    );
+    
+  } catch (error) {
+    console.error('Failed to start microphone recording:', error);
+    recordingStore.setError(error.message);
+  }
+};
+
 // Debug function to test permissions and audio
 const debugPermissions = async () => {
   console.log('=== PERMISSION DEBUG ===');
@@ -995,152 +1198,315 @@ watch(() => [recordingStore.hasScreenPermission, recordingStore.hasMicrophonePer
 );
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .recording-panel {
   position: fixed;
   width: 500px;
   max-width: 90vw;
-  background: #2a2a2a;
-  border: 1px solid #444;
-  border-radius: 8px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  @include d3-window;
   z-index: 1500;
+  padding: 2px;
+  background: #c0c0c0;
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: #1a1a1a;
-  border-bottom: 1px solid #444;
-  border-radius: 8px 8px 0 0;
+  padding: 4px 8px;
+  @include background-color('inputs-bg');
+  border-bottom: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
   cursor: move;
+  margin: 1px;
 }
 
 .panel-header h3 {
   margin: 0;
-  color: #fff;
-  font-size: 16px;
+  color: black;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .panel-controls {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .minimize-btn,
 .close-btn {
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 20px;
+  @include d3-object;
+  @include font;
+  padding: 2px 6px;
   cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  line-height: 1;
-}
-
-.minimize-btn:hover {
-  color: #ffaa00;
-}
-
-.close-btn:hover {
-  color: #ff6b6b;
+  font-size: 11px;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  &:hover {
+    background: #d0d0d0;
+  }
+  
+  &:active {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
 }
 
 .panel-tabs {
   display: flex;
-  background: #222;
-  border-bottom: 1px solid #444;
+  @include background-color('inputs-bg');
+  border-bottom: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  margin: 1px;
 }
 
 .tab-btn {
   flex: 1;
-  background: transparent;
+  @include background-color('inputs-bg');
   border: none;
-  color: #ccc;
-  padding: 12px;
+  color: black;
+  padding: 6px;
   cursor: pointer;
-  font-size: 13px;
-  border-right: 1px solid #444;
-}
-
-.tab-btn:last-child {
-  border-right: none;
-}
-
-.tab-btn:hover:not(:disabled) {
-  background: #333;
-}
-
-.tab-btn.active {
-  background: #2a2a2a;
-  color: #fff;
-  border-bottom: 2px solid #007acc;
-}
-
-.tab-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  font-size: 11px;
+  border-right: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  
+  &:last-child {
+    border-right: none;
+  }
+  
+  &:hover:not(:disabled) {
+    background: #d0d0d0;
+    color: black;
+  }
+  
+  &.active {
+    @include background-color('inputs-bg');
+    color: black;
+    box-shadow: inset 1px 1px 0 0 #000000, inset -1px -1px 0 0 #ffffff;
+  }
+  
+  &:disabled {
+    color: #808080;
+    cursor: not-allowed;
+  }
 }
 
 .tab-content {
-  padding: 16px;
+  padding: 8px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  margin: 1px;
 }
 
 .source-selection {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-  align-items: center;
+  margin-bottom: 8px;
 }
 
 .source-selection label {
-  color: #ccc;
-  font-size: 13px;
+  color: black;
+  font-size: 11px;
   white-space: nowrap;
+  font-weight: bold;
+  display: block;
+  margin-bottom: 4px;
 }
 
-.source-selection select {
+.source-list-container {
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  padding: 2px;
+}
+
+.source-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 4px;
+  @include background-color('inputs-bg');
+  border-bottom: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  margin-bottom: 1px;
+}
+
+.source-count {
+  color: black;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.source-list {
+  max-height: 120px;
+  overflow-y: auto;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  
+  &.disabled {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  
+  /* Windows 98 scrollbar styling */
+  &::-webkit-scrollbar {
+    width: 16px;
+    height: 16px;
+  }
+
+  &::-webkit-scrollbar-track {
+    @include background-color('inputs-bg');
+    border: 1px solid;
+    @include border-color-tl('content-border-left');
+    @include border-color-rb('content-border-right');
+  }
+
+  &::-webkit-scrollbar-thumb {
+    @include d3-object;
+    background: #c0c0c0;
+
+    &:hover {
+      background: #d0d0d0;
+    }
+  }
+
+  &::-webkit-scrollbar-corner {
+    @include background-color('inputs-bg');
+  }
+}
+
+.no-sources {
+  padding: 8px;
+  color: black;
+  font-size: 11px;
+  text-align: center;
+  @include font-color('font-disabled');
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-bottom: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  
+  &:hover:not(.disabled) {
+    background: #d0d0d0;
+    color: black;
+  }
+  
+  &.selected {
+    background: #0000ff;
+    color: white;
+    box-shadow: inset 1px 1px 0 0 #000000, inset -1px -1px 0 0 #ffffff;
+    
+    .source-name,
+    .source-type {
+      color: white;
+    }
+  }
+  
+  &.disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.source-icon {
+  margin-right: 6px;
+  font-size: 12px;
+  width: 16px;
+  text-align: center;
+}
+
+.source-info {
   flex: 1;
-  background: #333;
-  border: 1px solid #555;
-  color: white;
-  padding: 6px;
-  border-radius: 4px;
+  min-width: 0;
+}
+
+.source-name {
+  color: black;
+  font-size: 11px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-type {
+  color: black;
+  font-size: 10px;
+  opacity: 0.8;
+  text-transform: capitalize;
 }
 
 .refresh-btn {
-  background: #444;
-  border: 1px solid #666;
-  color: white;
-  padding: 6px 12px;
-  border-radius: 4px;
+  @include d3-object;
+  @include font;
+  padding: 4px 8px;
   cursor: pointer;
-  font-size: 12px;
-}
-
-.refresh-btn:hover:not(:disabled) {
-  background: #555;
-}
-
-.refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  font-size: 11px;
+  
+  &:hover:not(:disabled) {
+    background: #d0d0d0;
+  }
+  
+  &:active:not(:disabled) {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
+  
+  &:disabled {
+    @include font-color('font-disabled');
+    cursor: not-allowed;
+  }
 }
 
 .preview-container {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   text-align: center;
 }
 
 .source-preview {
   max-width: 100%;
   height: auto;
-  border: 1px solid #555;
-  border-radius: 4px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .webcam-preview {
@@ -1148,40 +1514,55 @@ watch(() => [recordingStore.hasScreenPermission, recordingStore.hasMicrophonePer
   max-width: 100%;
   height: auto;
   background: #000;
-  border: 1px solid #555;
-  border-radius: 4px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
 }
 
 .recording-options {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .option-group {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .option-group label {
   display: block;
-  color: #ccc;
-  font-size: 13px;
-  margin-bottom: 4px;
+  color: black;
+  font-size: 11px;
+  margin-bottom: 2px;
+  font-weight: bold;
 }
 
 .option-group select {
   width: 100%;
-  background: #333;
-  border: 1px solid #555;
-  color: white;
-  padding: 6px;
-  border-radius: 4px;
+  @include background-color('inputs-bg');
+  color: black;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  padding: 2px 4px;
+  font-size: 11px;
+  font-family: $font-family;
+  
+  &:focus {
+    outline: none;
+    box-shadow: inset 1px 1px 0 0 #000000, inset -1px -1px 0 0 #ffffff;
+  }
 }
 
 .audio-level-meter {
-  height: 20px;
-  background: #1a1a1a;
-  border-radius: 10px;
+  height: 16px;
+  @include background-color('inputs-bg');
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
   overflow: hidden;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .audio-level-bar {
@@ -1190,56 +1571,78 @@ watch(() => [recordingStore.hasScreenPermission, recordingStore.hasMicrophonePer
 }
 
 .audio-level-text {
-  color: #ccc;
-  font-size: 11px;
+  color: black;
+  font-size: 10px;
 }
 
 .warning-message {
-  background: #ffaa00;
-  color: #000;
-  padding: 8px 12px;
-  border-radius: 4px;
-  margin-bottom: 12px;
-  font-size: 13px;
+  background: #ffff00;
+  color: black;
+  padding: 4px 6px;
+  border: 1px solid;
+  @include border-color-tl('content-border-left');
+  @include border-color-rb('content-border-right');
+  @include border-shadow('content-shadow');
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: bold;
 }
 
 .recording-controls {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
 .record-btn {
   flex: 1;
+  @include d3-object;
+  @include font;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: bold;
   background: #ff0000;
   color: white;
-  border: none;
-  padding: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: bold;
-}
-
-.record-btn:hover:not(:disabled) {
-  background: #cc0000;
-}
-
-.record-btn:disabled {
-  background: #666;
-  cursor: not-allowed;
+  
+  &:hover:not(:disabled) {
+    background: #cc0000;
+  }
+  
+  &:active:not(:disabled) {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
+  
+  &:disabled {
+    @include font-color('font-disabled');
+    cursor: not-allowed;
+  }
 }
 
 .stop-btn {
   flex: 1;
+  @include d3-object;
+  @include font;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: bold;
   background: #ff4444;
   color: white;
-  border: none;
-  padding: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: bold;
   animation: pulse-red 1.5s ease-in-out infinite;
+  
+  &:hover {
+    background: #ff0000;
+  }
+  
+  &:active {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
 }
 
 @keyframes pulse-red {
@@ -1247,21 +1650,23 @@ watch(() => [recordingStore.hasScreenPermission, recordingStore.hasMicrophonePer
   50% { opacity: 0.7; }
 }
 
-.stop-btn:hover {
-  background: #ff0000;
-}
-
 .secondary-btn {
-  background: #444;
-  color: white;
-  border: 1px solid #666;
-  padding: 12px 20px;
-  border-radius: 4px;
+  @include d3-object;
+  @include font;
+  padding: 6px 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 11px;
+  
+  &:hover {
+    background: #d0d0d0;
+  }
+  
+  &:active {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
 }
 
-.secondary-btn:hover {
-  background: #555;
-}
 </style>

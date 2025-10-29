@@ -14,7 +14,7 @@
       :disabled="!hasClips"
       class="stop-btn"
     >
-      ⏹️
+      ■
     </button>
     
     <PanToggle />

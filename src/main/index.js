@@ -30,7 +30,7 @@ const createWindow = () => {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    title: 'ClipForge',
+    title: 'Forge',
     backgroundColor: '#1a1a1a',
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),

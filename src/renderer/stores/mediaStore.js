@@ -2,7 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { generateId } from '../../shared/utils/videoUtils';
 
-export const useMediaStore = defineStore('media', () => {
+export const useMediaStore = (appContext = 'clipforge') => {
+  return defineStore(`${appContext}-media`, () => {
   // State
   const mediaFiles = ref([]);
   const importStatus = ref('idle'); // 'idle', 'importing', 'error', 'success'
@@ -140,4 +141,5 @@ export const useMediaStore = defineStore('media', () => {
     serialize,
     deserialize
   };
-});
+  })();
+};

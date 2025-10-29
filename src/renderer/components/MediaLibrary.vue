@@ -124,7 +124,16 @@ import { useTimelineStore } from '../stores/timelineStore';
 import importService from '../services/importService';
 import { formatDuration, formatFileSize, getVideoCodecName } from '../../shared/utils/videoUtils';
 
-const mediaStore = useMediaStore();
+// Props
+const props = defineProps({
+  appMode: {
+    type: String,
+    required: true
+  }
+});
+
+const mediaStore = useMediaStore(props.appMode);
+const timelineStore = useTimelineStore(props.appMode);
 const isDragOver = ref(false);
 const selectedClip = ref(null);
 const draggingClip = ref(null);

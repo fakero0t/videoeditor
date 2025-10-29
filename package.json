@@ -1,9 +1,9 @@
 {
-  "name": "clipforge",
+  "name": "forge",
   "version": "1.0.0",
   "description": "Streamlined desktop video editor",
   "main": "dist-electron/main/index.js",
-  "author": "ClipForge Team",
+  "author": "Forge Team",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
@@ -43,8 +43,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.clipforge.app",
-    "productName": "ClipForge",
+    "appId": "com.forge.app",
+    "productName": "Forge",
     "directories": {
       "output": "dist-build",
       "buildResources": "build"

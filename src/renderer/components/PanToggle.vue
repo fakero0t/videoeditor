@@ -5,7 +5,7 @@
     class="pan-btn"
     title="Toggle pan mode (H)"
   >
-    <span class="icon">✋</span> Pan
+    Pan
   </button>
 </template>
 
@@ -36,31 +36,36 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
+@import "../../styles/plaza/variables";
+@import "../../styles/plaza/mixins";
+@import "../../styles/plaza/themes/theme-standard";
+
 .pan-btn {
-  background: #444;
-  border: 1px solid #666;
-  color: white;
-  padding: 6px 12px;
+  @include d3-object;
+  @include font;
+  padding: 4px 8px;
   cursor: pointer;
-  border-radius: 3px;
-  font-size: 12px;
-  transition: all 0.2s;
+  font-size: 11px;
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-.pan-btn:hover {
-  background: #555;
-}
-
-.pan-btn.active {
-  background: #007acc;
-  border-color: #005a9e;
-}
-
-.icon {
-  font-size: 14px;
+  
+  &:hover:not(.active) {
+    background: #d0d0d0;
+  }
+  
+  &:active:not(.active) {
+    box-shadow: 1px 1px 0 0 black inset;
+    @include border-shadow('btn-active-shadow');
+    @include border-color-tl('btn-active-border');
+    @include border-color-rb('btn-active-border');
+  }
+  
+  &.active {
+    background: #0000ff;
+    color: white;
+    box-shadow: inset 1px 1px 0 0 #000000, inset -1px -1px 0 0 #ffffff;
+  }
 }
 </style>

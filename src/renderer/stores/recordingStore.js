@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 
-export const useRecordingStore = defineStore('recording', () => {
+export const useRecordingStore = (appContext = 'clipforge') => {
+  return defineStore(`${appContext}-recording`, () => {
   // State
   const isRecording = ref(false);
   const recordingType = ref(null); // 'screen', 'webcam', 'composite'
@@ -197,4 +198,5 @@ export const useRecordingStore = defineStore('recording', () => {
     clearError,
     reset
   };
-});
+  })();
+};

@@ -39,9 +39,17 @@ import { useTimelineStore } from '../stores/timelineStore';
 import { useMediaStore } from '../stores/mediaStore';
 import SaveProgressDialog from './SaveProgressDialog.vue';
 
-const projectStore = useProjectStore();
-const timelineStore = useTimelineStore();
-const mediaStore = useMediaStore();
+// Props
+const props = defineProps({
+  appMode: {
+    type: String,
+    required: true
+  }
+});
+
+const projectStore = useProjectStore(props.appMode);
+const timelineStore = useTimelineStore(props.appMode);
+const mediaStore = useMediaStore(props.appMode);
 
 const isSaving = ref(false);
 const showSaveProgress = ref(false);
@@ -122,7 +130,8 @@ const openProject = async () => {
       projectPath,
       projectData,
       timelineStore,
-      mediaStore
+      mediaStore,
+      props.appMode
     );
     
     // Extract project name
@@ -187,7 +196,8 @@ const performSave = async (projectPath) => {
     const { projectData, filesToCopy } = await projectStore.projectService.prepareProjectForSave(
       projectPath,
       timelineStore,
-      mediaStore
+      mediaStore,
+      props.appMode
     );
     
     saveProgress.value.total = filesToCopy.length + 1; // +1 for project file
