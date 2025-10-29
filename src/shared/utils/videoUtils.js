@@ -40,6 +40,12 @@ export const isVideoFile = (filename) => {
   return videoExtensions.includes(ext);
 };
 
+export const isAudioFile = (filename) => {
+  const audioExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.opus', '.flac', '.wma', '.aiff'];
+  const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+  return audioExtensions.includes(ext);
+};
+
 export const generateId = () => {
   return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 };

@@ -10,7 +10,7 @@
     >
       <div class="drop-message">
         <div class="drop-icon">📁</div>
-        <p>Drop video files to import</p>
+        <p>{{ dropMessage }}</p>
       </div>
     </div>
 
@@ -37,7 +37,7 @@
 
     <!-- Header with import button -->
     <div class="library-header">
-      <h3>Media Library</h3>
+      <h3>{{ libraryTitle }}</h3>
       <button @click="handleImportClick" class="import-btn" :disabled="mediaStore && mediaStore.importStatus === 'importing'">
         + Import Files
       </button>
@@ -69,8 +69,11 @@
             @error="handleThumbnailError"
           />
           <div v-else class="thumbnail-placeholder">
-            <svg class="icon-video" viewBox="0 0 24 24">
+            <svg v-if="appMode === 'clipforge'" class="icon-video" viewBox="0 0 24 24">
               <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+            </svg>
+            <svg v-else class="icon-audio" viewBox="0 0 24 24">
+              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
             </svg>
           </div>
           <div v-if="clip.isRecording" class="recording-badge">REC</div>
@@ -105,11 +108,14 @@
 
     <!-- Empty State -->
     <div v-else class="empty-state">
-      <svg class="empty-icon" viewBox="0 0 24 24">
+      <svg v-if="appMode === 'clipforge'" class="empty-icon" viewBox="0 0 24 24">
         <path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 9.5L9.5 15 8 13l-2 3h12l-3.5-4.5z"/>
       </svg>
-      <h4>No media files yet</h4>
-      <p>Import video files to get started</p>
+      <svg v-else class="empty-icon" viewBox="0 0 24 24">
+        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6zm-2 16c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+      </svg>
+      <h4>{{ emptyStateTitle }}</h4>
+      <p>{{ emptyStateDescription }}</p>
       <button @click="handleImportClick" class="import-btn-large">
         Import Files
       </button>
@@ -118,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
 import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
@@ -146,6 +152,23 @@ const importService = new ImportService(props.appMode);
 const isDragOver = ref(false);
 const selectedClip = ref(null);
 const draggingClip = ref(null);
+
+// Computed properties for dynamic text based on appMode
+const libraryTitle = computed(() => {
+  return props.appMode === 'voiceforge' ? 'Audio Library' : 'Media Library';
+});
+
+const dropMessage = computed(() => {
+  return props.appMode === 'voiceforge' ? 'Drop audio files to import' : 'Drop video files to import';
+});
+
+const emptyStateTitle = computed(() => {
+  return props.appMode === 'voiceforge' ? 'No audio files yet' : 'No media files yet';
+});
+
+const emptyStateDescription = computed(() => {
+  return props.appMode === 'voiceforge' ? 'Import audio files to get started' : 'Import video files to get started';
+});
 
 // File picker button
 const handleImportClick = async () => {
@@ -609,7 +632,8 @@ onUnmounted(() => {
   left: 0;
 }
 
-.icon-video {
+.icon-video,
+.icon-audio {
   width: 16px;
   height: 16px;
   fill: #808080;
