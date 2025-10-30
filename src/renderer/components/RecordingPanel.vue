@@ -37,43 +37,26 @@
     
     <!-- Screen Recording Tab -->
     <div v-if="currentTab === 'screen'" class="tab-content">
-      <div class="source-selection">
+      <div class="option-group">
         <label>Screen/Window Source:</label>
-        <div class="source-list-container">
-          <div class="source-list-header">
-            <span class="source-count">{{ recordingStore.availableScreenSources?.length || 0 }} sources</span>
-            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
-              Refresh
-            </button>
-          </div>
-          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
-            <div 
-              v-if="recordingStore.availableScreenSources.length === 0"
-              class="no-sources"
-            >
-              No sources available
-            </div>
-            <div 
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <select 
+            v-model="recordingStore.selectedScreenSource"
+            :disabled="recordingStore.isRecording"
+            style="flex: 1;"
+          >
+            <option :value="null">Select a source...</option>
+            <option 
               v-for="source in (recordingStore.availableScreenSources || [])" 
               :key="source.id"
-              @click="selectScreenSource(source)"
-              :class="{ 
-                'source-item': true, 
-                'selected': recordingStore.selectedScreenSource?.id === source.id,
-                'disabled': recordingStore.isRecording
-              }"
+              :value="source"
             >
-              <div class="source-icon">
-                <span v-if="source.type === 'screen'">🖥️</span>
-                <span v-else-if="source.type === 'window'">🪟</span>
-                <span v-else>📄</span>
-              </div>
-              <div class="source-info">
-                <div class="source-name">{{ source.name }}</div>
-                <div class="source-type">{{ source.type }}</div>
-              </div>
-            </div>
-          </div>
+              {{ source.type === 'screen' ? '🖥️' : source.type === 'window' ? '🪟' : '📄' }} {{ source.name }}
+            </option>
+          </select>
+          <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+            Refresh
+          </button>
         </div>
       </div>
       
@@ -167,41 +150,26 @@
       
       <!-- Webcam Recording Tab -->
     <div v-if="currentTab === 'webcam'" class="tab-content">
-      <div class="source-selection">
+      <div class="option-group">
         <label>Webcam:</label>
-        <div class="source-list-container">
-          <div class="source-list-header">
-            <span class="source-count">{{ recordingStore.availableWebcamSources.length }} webcams</span>
-            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
-              Refresh
-            </button>
-          </div>
-          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
-            <div 
-              v-if="recordingStore.availableWebcamSources.length === 0"
-              class="no-sources"
-            >
-              No webcams available
-            </div>
-            <div 
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <select 
+            v-model="recordingStore.selectedWebcamSource"
+            :disabled="recordingStore.isRecording"
+            style="flex: 1;"
+          >
+            <option :value="null">Select a webcam...</option>
+            <option 
               v-for="cam in recordingStore.availableWebcamSources" 
               :key="cam.deviceId"
-              @click="selectWebcamSource(cam)"
-              :class="{ 
-                'source-item': true, 
-                'selected': recordingStore.selectedWebcamSource?.deviceId === cam.deviceId,
-                'disabled': recordingStore.isRecording
-              }"
+              :value="cam"
             >
-              <div class="source-icon">
-                <span>📹</span>
-              </div>
-              <div class="source-info">
-                <div class="source-name">{{ cam.label }}</div>
-                <div class="source-type">webcam</div>
-              </div>
-            </div>
-          </div>
+              📹 {{ cam.label }}
+            </option>
+          </select>
+          <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+            Refresh
+          </button>
         </div>
       </div>
       
@@ -293,43 +261,26 @@
     
     <!-- Composite Recording Tab -->
     <div v-if="currentTab === 'composite'" class="tab-content">
-      <div class="source-selection">
+      <div class="option-group">
         <label>Screen Source:</label>
-        <div class="source-list-container">
-          <div class="source-list-header">
-            <span class="source-count">{{ recordingStore.availableScreenSources?.length || 0 }} sources</span>
-            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
-              Refresh
-            </button>
-          </div>
-          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
-            <div 
-              v-if="recordingStore.availableScreenSources.length === 0"
-              class="no-sources"
-            >
-              No sources available
-            </div>
-            <div 
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <select 
+            v-model="compositeScreenSource"
+            :disabled="recordingStore.isRecording"
+            style="flex: 1;"
+          >
+            <option :value="null">Select a source...</option>
+            <option 
               v-for="source in (recordingStore.availableScreenSources || [])" 
               :key="source.id"
-              @click="selectCompositeScreenSource(source)"
-              :class="{ 
-                'source-item': true, 
-                'selected': compositeScreenSource?.id === source.id,
-                'disabled': recordingStore.isRecording
-              }"
+              :value="source"
             >
-              <div class="source-icon">
-                <span v-if="source.type === 'screen'">🖥️</span>
-                <span v-else-if="source.type === 'window'">🪟</span>
-                <span v-else>📄</span>
-              </div>
-              <div class="source-info">
-                <div class="source-name">{{ source.name }}</div>
-                <div class="source-type">{{ source.type }}</div>
-              </div>
-            </div>
-          </div>
+              {{ source.type === 'screen' ? '🖥️' : source.type === 'window' ? '🪟' : '📄' }} {{ source.name }}
+            </option>
+          </select>
+          <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+            Refresh
+          </button>
         </div>
       </div>
       
@@ -341,41 +292,26 @@
         />
       </div>
       
-      <div class="source-selection">
+      <div class="option-group">
         <label>Webcam:</label>
-        <div class="source-list-container">
-          <div class="source-list-header">
-            <span class="source-count">{{ recordingStore.availableWebcamSources.length }} webcams</span>
-            <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
-              Refresh
-            </button>
-          </div>
-          <div class="source-list" :class="{ disabled: recordingStore.isRecording }">
-            <div 
-              v-if="recordingStore.availableWebcamSources.length === 0"
-              class="no-sources"
-            >
-              No webcams available
-            </div>
-            <div 
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <select 
+            v-model="compositeWebcamSource"
+            :disabled="recordingStore.isRecording"
+            style="flex: 1;"
+          >
+            <option :value="null">Select a webcam...</option>
+            <option 
               v-for="cam in recordingStore.availableWebcamSources" 
               :key="cam.deviceId"
-              @click="selectCompositeWebcamSource(cam)"
-              :class="{ 
-                'source-item': true, 
-                'selected': compositeWebcamSource?.deviceId === cam.deviceId,
-                'disabled': recordingStore.isRecording
-              }"
+              :value="cam"
             >
-              <div class="source-icon">
-                <span>📹</span>
-              </div>
-              <div class="source-info">
-                <div class="source-name">{{ cam.label }}</div>
-                <div class="source-type">webcam</div>
-              </div>
-            </div>
-          </div>
+              📹 {{ cam.label }}
+            </option>
+          </select>
+          <button @click="refreshSources" class="refresh-btn" :disabled="recordingStore.isRecording">
+            Refresh
+          </button>
         </div>
       </div>
       
@@ -877,7 +813,7 @@ const refreshPreview = () => {
   // Preview is shown via thumbnail from source selection
 };
 
-// Source selection methods
+// Source selection methods - now handled by v-model, but keeping for any manual calls
 const selectScreenSource = (source) => {
   if (recordingStore.isRecording) return;
   recordingStore.setSelectedScreenSource(source);
@@ -902,6 +838,15 @@ const selectCompositeWebcamSource = (cam) => {
   compositeWebcamSource.value = cam;
   startCompositeWebcamPreview();
 };
+
+// Watch for changes in composite sources to trigger previews
+watch(compositeWebcamSource, (newCam) => {
+  if (newCam) {
+    startCompositeWebcamPreview();
+  } else {
+    stopCompositeWebcamPreview();
+  }
+});
 
 // Recording controls
 const startRecording = async () => {
@@ -964,8 +909,8 @@ const startRecording = async () => {
         onAudioLevel: (level) => {
           recordingStore.setAudioLevel(level);
         },
-        onComplete: async (filePath) => {
-          await handleRecordingComplete(filePath);
+        onComplete: async (filePath, duration) => {
+          await handleRecordingComplete(filePath, duration);
         },
         onError: async (error) => {
           console.error('Recording error:', error);
@@ -993,9 +938,9 @@ const stopRecording = async () => {
     // Notify main process that recording stopped
     await window.electronAPI.recording.setRecordingState(false);
     
-    // Hide widget and show panel
+    // Hide widget and close panel
     isWidgetVisible.value = false;
-    isPanelOpen.value = true;
+    isPanelOpen.value = false;
     
     // Show success popup
     await window.electronAPI.showMessageBox({
@@ -1005,9 +950,6 @@ const stopRecording = async () => {
       detail: 'Your recording has been saved and added to the media library.'
     });
     
-    // Close the recording panel
-    isPanelOpen.value = false;
-    
   } catch (error) {
     recordingStore.setLastError(error.message);
     
@@ -1015,33 +957,59 @@ const stopRecording = async () => {
     recordingStore.stopRecording();
     await window.electronAPI.recording.setRecordingState(false);
     isWidgetVisible.value = false;
-    isPanelOpen.value = true;
+    isPanelOpen.value = false;
   }
 };
 
-const handleRecordingComplete = async (filePath) => {
+const handleRecordingComplete = async (filePath, calculatedDuration = null) => {
+  console.log('[RecordingPanel] handleRecordingComplete called with filePath:', filePath, 'calculatedDuration:', calculatedDuration);
   
   try {
     // Convert to MP4 (or keep WebM if conversion fails)
     let finalPath = filePath;
     
-    try {
-      const mp4Path = await window.electronAPI.ffmpeg.convertWebMToMP4(filePath);
-      finalPath = mp4Path;
-      
-      // Delete WebM after successful conversion
-      await window.electronAPI.fileSystem.deleteFile(filePath);
-    } catch (conversionError) {
-      // Keep WebM file
-    }
+    // Skip conversion for now to test media library import
+    console.log('[RecordingPanel] Skipping conversion, using WebM file directly');
+    finalPath = filePath;
     
     // Import to media library
+    console.log('[RecordingPanel] Getting video info...');
     const videoInfo = await window.electronAPI.ffmpeg.getVideoInfo(finalPath);
+    console.log('[RecordingPanel] Video info:', videoInfo);
     
+    // Use calculated duration as fallback if FFmpeg returns 0 duration
+    if (videoInfo.duration === 0 && calculatedDuration && calculatedDuration > 0) {
+      console.log('[RecordingPanel] Using calculated duration as fallback:', calculatedDuration);
+      videoInfo.duration = calculatedDuration;
+    }
+    
+    // Calculate bitrate as fallback if FFmpeg returns 0 bitrate
+    if (videoInfo.bitrate === 0 && videoInfo.duration > 0 && videoInfo.fileSize > 0) {
+      videoInfo.bitrate = Math.round((videoInfo.fileSize * 8) / videoInfo.duration);
+      console.log('[RecordingPanel] Calculated bitrate as fallback:', videoInfo.bitrate);
+    }
+    
+    console.log('[RecordingPanel] Generating thumbnail...');
     const thumbnail = await window.electronAPI.ffmpeg.generateThumbnail(finalPath, 1);
+    console.log('[RecordingPanel] Thumbnail generated:', thumbnail);
     
     // Extract filename from path
     const fileName = finalPath.split('/').pop();
+    console.log('[RecordingPanel] Adding to media library:', {
+      filePath: finalPath,
+      fileName: fileName,
+      duration: videoInfo.duration,
+      width: videoInfo.width,
+      height: videoInfo.height,
+      codec: videoInfo.codec,
+      bitrate: videoInfo.bitrate,
+      frameRate: videoInfo.frameRate,
+      hasAudio: videoInfo.hasAudio,
+      fileSize: videoInfo.size,
+      format: videoInfo.format,
+      thumbnailPath: thumbnail,
+      isRecording: true
+    });
     
     mediaStore.addMediaFile({
       filePath: finalPath,
@@ -1058,6 +1026,8 @@ const handleRecordingComplete = async (filePath) => {
       thumbnailPath: thumbnail,
       isRecording: true // Mark as recording
     });
+    
+    console.log('[RecordingPanel] Successfully added to media library');
     
     
     // Show success message
@@ -1082,7 +1052,7 @@ const handleRecordingComplete = async (filePath) => {
     recordingStore.stopRecording();
     await window.electronAPI.recording.setRecordingState(false);
     isWidgetVisible.value = false;
-    isPanelOpen.value = true;
+    isPanelOpen.value = false;
   }
 };
 
@@ -1280,8 +1250,8 @@ const startWebcamRecording = async () => {
         onAudioLevel: (level) => {
           recordingStore.setAudioLevel(level);
         },
-        onComplete: async (filePath) => {
-          await handleRecordingComplete(filePath);
+        onComplete: async (filePath, duration) => {
+          await handleRecordingComplete(filePath, duration);
         },
         onError: async (error) => {
           console.error('Recording error:', error);
@@ -1338,8 +1308,8 @@ const startMicrophoneRecording = async () => {
         onAudioLevel: (level) => {
           recordingStore.setAudioLevel(level);
         },
-        onComplete: async (filePath) => {
-          await handleRecordingComplete(filePath);
+        onComplete: async (filePath, duration) => {
+          await handleRecordingComplete(filePath, duration);
         },
         onError: async (error) => {
           console.error('Recording error:', error);
@@ -1413,7 +1383,9 @@ const startCompositeRecording = async () => {
           recordingStore.setRecordingType('composite');
           recordingStore.currentRecordingId = recordingId;
           recordingStore.startRecording();
-          minimizePanel();
+          // Minimize panel after setting recording state
+          isPanelOpen.value = false;
+          isWidgetVisible.value = true;
         },
         onProgress: (duration) => {
           // Duration tracked by recordingStore timer
@@ -1421,8 +1393,8 @@ const startCompositeRecording = async () => {
         onAudioLevel: (level) => {
           recordingStore.setAudioLevel(level);
         },
-        onComplete: async (filePath) => {
-          await handleRecordingComplete(filePath);
+        onComplete: async (filePath, duration) => {
+          await handleRecordingComplete(filePath, duration);
         },
         onError: async (error) => {
           console.error('Composite recording error:', error);
@@ -1548,7 +1520,7 @@ watch(() => recordingStore.selectedMicrophoneSource, async (newMicrophone) => {
       await screenRecorder.setupPreviewAudioLevelMonitoring(
         newMicrophone,
         (level) => {
-          recordingStore.updateAudioLevel(level);
+          recordingStore.setAudioLevel(level);
         }
       );
     } catch (error) {
@@ -1558,7 +1530,7 @@ watch(() => recordingStore.selectedMicrophoneSource, async (newMicrophone) => {
   } else {
     // Clean up audio monitoring when no microphone selected
     screenRecorder.cleanupAudioMonitoring();
-    recordingStore.updateAudioLevel(0);
+    recordingStore.setAudioLevel(0);
   }
 });
 
@@ -1881,8 +1853,8 @@ watch(() => [recordingStore.hasScreenPermission, recordingStore.hasMicrophonePer
 }
 
 .webcam-preview {
-  width: 100%;
-  max-width: 100%;
+  width: 50%;
+  max-width: 50%;
   height: auto;
   background: #000;
   border: 1px solid;

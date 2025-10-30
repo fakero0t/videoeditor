@@ -41,7 +41,8 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
       };
       
       track.clips.push(clip);
-      isDirty.value = !isDirty.value; // Trigger re-render
+      // Force dirty flag to true to ensure immediate re-render
+      isDirty.value = true;
     };
     
     const removeClip = (clipId) => {
@@ -49,7 +50,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
         const index = track.clips.findIndex(clip => clip.id === clipId);
         if (index > -1) {
           track.clips.splice(index, 1);
-          isDirty.value = !isDirty.value; // Trigger re-render
+          isDirty.value = true; // Trigger re-render
         }
       });
     };
@@ -60,7 +61,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
         if (clip) {
           clip.startTime = newStartTime;
           clip.endTime = newStartTime + clip.duration;
-          isDirty.value = !isDirty.value; // Trigger re-render
+          isDirty.value = true; // Trigger re-render
         }
       });
     };
@@ -71,7 +72,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
         if (clip) {
           clip.duration = newDuration;
           clip.endTime = clip.startTime + newDuration;
-          isDirty.value = !isDirty.value; // Trigger re-render
+          isDirty.value = true; // Trigger re-render
         }
       });
     };
@@ -101,7 +102,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
             
             // Insert second clip after first
             track.clips.splice(clipIndex + 1, 0, secondClip);
-            isDirty.value = !isDirty.value; // Trigger re-render
+            isDirty.value = true; // Trigger re-render
           }
         }
       });
@@ -161,7 +162,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
         height: 100
       };
       tracks.value.push(newTrack);
-      isDirty.value = !isDirty.value; // Trigger re-render
+      isDirty.value = true; // Trigger re-render
     };
     
     const removeTrack = (trackId) => {
@@ -170,7 +171,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
       const index = tracks.value.findIndex(t => t.id === trackId);
       if (index > -1) {
         tracks.value.splice(index, 1);
-        isDirty.value = !isDirty.value; // Trigger re-render
+        isDirty.value = true; // Trigger re-render
       }
     };
     
@@ -178,7 +179,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
       const track = tracks.value.find(t => t.id === trackId);
       if (track) {
         track.height = Math.max(50, Math.min(height, 200));
-        isDirty.value = !isDirty.value; // Trigger re-render
+        isDirty.value = true; // Trigger re-render
       }
     };
     
@@ -186,7 +187,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
       const track = tracks.value.find(t => t.id === trackId);
       if (track) {
         track.name = name;
-        isDirty.value = !isDirty.value; // Trigger re-render
+        isDirty.value = true; // Trigger re-render
       }
     };
     
@@ -195,7 +196,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
     };
     
     const markDirty = () => {
-      isDirty.value = !isDirty.value; // Toggle to trigger re-render
+      isDirty.value = true; // Set to true to trigger re-render
     };
     
     const getClipById = (clipId) => {
@@ -228,7 +229,7 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
       if (data.timelineDuration !== undefined) timelineDuration.value = data.timelineDuration;
       if (data.selectedClips) selectedClips.value = data.selectedClips;
       if (data.panMode !== undefined) panMode.value = data.panMode;
-      isDirty.value = !isDirty.value; // Trigger re-render
+      isDirty.value = true; // Trigger re-render
     };
     
     return {

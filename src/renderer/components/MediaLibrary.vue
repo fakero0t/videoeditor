@@ -184,16 +184,32 @@ const handleDrop = async (event) => {
   isDragOver.value = false;
   
   const files = Array.from(event.dataTransfer.files);
-  const { validFiles, invalidFiles } = importService.validateDroppedFiles(files);
   
-  if (invalidFiles.length > 0) {
-    alert(`Skipped ${invalidFiles.length} unsupported file(s): ${invalidFiles.join(', ')}`);
+  // In Electron, files have a 'path' property
+  // Extract file paths directly from the dropped files
+  const filePaths = files
+    .filter(file => {
+      const isValid = importService.validateDroppedFiles([file]).validFiles.length > 0;
+      if (!isValid) {
+        console.warn(`Skipped unsupported file: ${file.name}`);
+      }
+      return isValid;
+    })
+    .map(file => {
+      const path = file.path;
+      if (!path) {
+        console.warn(`File ${file.name} has no path property. Available properties:`, Object.keys(file));
+      }
+      return path;
+    })
+    .filter(path => path); // Filter out any undefined paths
+  
+  if (filePaths.length === 0) {
+    console.warn('No valid video files to import');
+    return;
   }
   
-  if (validFiles.length > 0) {
-    const filePaths = validFiles.map(file => file.path);
-    await importFiles(filePaths);
-  }
+  await importFiles(filePaths);
 };
 
 

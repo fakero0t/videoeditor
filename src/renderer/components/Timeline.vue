@@ -829,6 +829,12 @@ const handleDrop = (event) => {
       
       // Add clip to timeline
       timelineStore.addClipToTrack(targetTrackId, data.clip, targetTime);
+      
+      // Force immediate render to ensure clip appears
+      nextTick(() => {
+        renderTimeline();
+        renderTimeRuler();
+      });
     }
   } catch (error) {
     console.error('Error handling drop:', error);

@@ -43,14 +43,22 @@ class SplitManager {
     return true;
   }
 
-  // Find clips that intersect with playhead
+  // Find clips that intersect with playhead (only selected clips)
   findClipsAtPlayhead(playheadTime) {
     const clipsAtPlayhead = [];
+    const selectedClipIds = this.clipSelectionManager.getSelectedClipIds();
+    
+    // If no clips are selected, return empty array
+    if (selectedClipIds.length === 0) {
+      return clipsAtPlayhead;
+    }
     
     this.timelineStore.tracks.forEach(track => {
       track.clips.forEach(clip => {
-        // Check if playhead is within clip boundaries
-        if (playheadTime > clip.startTime && playheadTime < clip.startTime + clip.duration) {
+        // Only process selected clips that are at playhead position
+        if (selectedClipIds.includes(clip.id) && 
+            playheadTime > clip.startTime && 
+            playheadTime < clip.startTime + clip.duration) {
           clipsAtPlayhead.push({ clip, trackId: track.id });
         }
       });
@@ -155,8 +163,14 @@ class SplitManager {
   // Validate if split is possible at current playhead
   canSplitAtPlayhead() {
     const playheadTime = this.timelineStore.playheadPosition;
-    const clips = this.findClipsAtPlayhead(playheadTime);
+    const selectedClipIds = this.clipSelectionManager.getSelectedClipIds();
     
+    // Must have at least one selected clip
+    if (selectedClipIds.length === 0) {
+      return false;
+    }
+    
+    const clips = this.findClipsAtPlayhead(playheadTime);
     return clips.length > 0;
   }
 

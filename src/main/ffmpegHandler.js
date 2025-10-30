@@ -115,15 +115,24 @@ class FFmpegHandler {
             return;
           }
           
+          const duration = parseFloat(metadata.format.duration) || 0;
+          const fileSize = parseInt(metadata.format.size) || 0;
+          let bitrate = parseInt(metadata.format.bit_rate) || 0;
+          
+          // Calculate bitrate as fallback for WebM files
+          if (bitrate === 0 && duration > 0 && fileSize > 0) {
+            bitrate = Math.round((fileSize * 8) / duration);
+          }
+          
           resolve({
-            duration: parseFloat(metadata.format.duration) || 0,
+            duration: duration,
             width: videoStream.width || 0,
             height: videoStream.height || 0,
             codec: videoStream.codec_name || 'unknown',
-            bitrate: parseInt(metadata.format.bit_rate) || 0,
+            bitrate: bitrate,
             frameRate: this.parseFrameRate(videoStream.r_frame_rate || '30/1'),
             hasAudio: !!audioStream,
-            fileSize: parseInt(metadata.format.size) || 0,
+            fileSize: fileSize,
             format: metadata.format.format_name || 'unknown'
           });
         });

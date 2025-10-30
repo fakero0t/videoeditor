@@ -343,6 +343,7 @@ export class ScreenRecorder {
         };
         
         this.mediaRecorder.onstop = async () => {
+          console.log('[ScreenRecorder] MediaRecorder onstop event fired');
           await this.handleRecordingComplete();
         };
         
@@ -433,12 +434,16 @@ export class ScreenRecorder {
   // Stop recording
   async stopRecording() {
     return new Promise((resolve) => {
+      console.log('[ScreenRecorder] stopRecording called, MediaRecorder state:', this.mediaRecorder?.state);
+      
       if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+        console.log('[ScreenRecorder] MediaRecorder is not active, resolving immediately');
         resolve();
         return;
       }
       
       // Stop media recorder (this will trigger onstop handler)
+      console.log('[ScreenRecorder] Calling MediaRecorder.stop()');
       this.mediaRecorder.stop();
       
       resolve();
@@ -467,19 +472,27 @@ export class ScreenRecorder {
       }
       
       // Create blob from recorded chunks
+      console.log('[ScreenRecorder] Recorded chunks count:', this.recordedChunks.length);
+      console.log('[ScreenRecorder] Recorded chunks total size:', this.recordedChunks.reduce((sum, chunk) => sum + chunk.size, 0));
+      
       const blob = new Blob(this.recordedChunks, { type: 'video/webm' });
       const duration = (Date.now() - this.startTime) / 1000;
       
+      console.log('[ScreenRecorder] Blob size:', blob.size, 'bytes');
+      console.log('[ScreenRecorder] Blob type:', blob.type);
+      console.log('[ScreenRecorder] Recording duration:', duration, 'seconds');
+      
       // Save to temporary location
       const tempPath = await this.saveBlobToFile(blob);
+      console.log('[ScreenRecorder] File saved to:', tempPath);
       
       // Log success with metrics
       this.diagnostics.logRecordingSuccess(duration, blob.size, tempPath);
       
-      // Callback with file path (BEFORE cleanup to preserve callbacks)
+      // Callback with file path and duration (BEFORE cleanup to preserve callbacks)
       if (this.callbacks.onComplete) {
         try {
-          await this.callbacks.onComplete(tempPath);
+          await this.callbacks.onComplete(tempPath, duration);
         } catch (callbackError) {
           console.error('[Recording] onComplete callback failed:', callbackError);
         }
@@ -709,7 +722,6 @@ export class ScreenRecorder {
     this.callbacks = callbacks;
     
     try {
-      
       // Validate requirements
       const validation = await this.validateRecordingRequirements(screenSource, microphoneSource);
       if (!validation.valid) {

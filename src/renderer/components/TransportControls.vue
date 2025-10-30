@@ -2,7 +2,6 @@
   <div class="transport-controls">
     <button 
       @click="playPause" 
-      :disabled="!hasClips"
       class="play-pause-btn"
       :class="{ playing: isPlaying }"
     >
@@ -11,7 +10,6 @@
     
     <button 
       @click="stopPlayback" 
-      :disabled="!hasClips"
       class="stop-btn"
     >
       ■
@@ -50,10 +48,6 @@ const props = defineProps({
 });
 
 const timelineStore = useClipForgeTimelineStore();
-
-const hasClips = computed(() => {
-  return timelineStore.tracks.some(track => track.clips.length > 0);
-});
 
 const currentTime = computed(() => timelineStore.playheadPosition);
 

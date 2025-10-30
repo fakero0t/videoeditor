@@ -58,9 +58,16 @@ const splitPreview = computed(() => {
 
 const splitTooltip = computed(() => {
   if (canSplit.value) {
-    return 'Split clip(s) at playhead (S)';
+    return 'Split selected clip(s) at playhead (S)';
   }
-  return 'Position playhead over a clip to split';
+  
+  // Check if any clips are selected
+  const selectedClipIds = clipSelectionManager.getSelectedClipIds();
+  if (selectedClipIds.length === 0) {
+    return 'Select a clip and position playhead over it to split';
+  }
+  
+  return 'Position playhead over selected clip to split';
 });
 
 const handleSplit = () => {

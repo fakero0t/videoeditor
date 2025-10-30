@@ -159,6 +159,9 @@ class DragDropManager {
       this.dragState.draggedClip, 
       finalTime
     );
+    
+    // Force immediate render to ensure clip appears
+    this.timelineStore.markDirty();
   }
 
   // Move clip on timeline

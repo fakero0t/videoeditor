@@ -39,19 +39,12 @@ export const play = () => {
     return;
   }
   
-  // Check if there are any clips on the timeline
-  const hasClips = timelineStore.tracks.some(track => track.clips.length > 0);
-  if (!hasClips) {
-    console.warn('PlaybackStore: No clips on timeline to play');
-    return;
-  }
-  
   // If already playing, don't start again
   if (isPlaying.value && isTimelinePlayback.value) {
     return;
   }
   
-  // Start timeline playback
+  // Start timeline playback (works even on empty timeline)
   isTimelinePlayback.value = true;
   isPlaying.value = true;
   
