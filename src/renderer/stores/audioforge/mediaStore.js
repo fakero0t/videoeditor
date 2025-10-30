@@ -80,10 +80,10 @@ export const useAudioForgeMediaStore = defineStore('audioforge-media', () => {
 
     // Serialize for project save
     const serialize = () => {
-      return mediaFiles.value.map(file => ({
+      return JSON.parse(JSON.stringify(mediaFiles.value.map(file => ({
         ...file,
         originalPath: file.filePath // Store original path for project save
-      }));
+      }))));
     };
 
     // Deserialize from project load

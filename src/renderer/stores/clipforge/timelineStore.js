@@ -209,12 +209,12 @@ export const useClipForgeTimelineStore = defineStore('clipforge-timeline', () =>
     // Serialize for project save
     const serialize = () => {
       return {
-        tracks: tracks.value,
+        tracks: JSON.parse(JSON.stringify(tracks.value)),
         playheadPosition: playheadPosition.value,
         zoomLevel: zoomLevel.value,
         scrollPosition: scrollPosition.value,
         timelineDuration: timelineDuration.value,
-        selectedClips: selectedClips.value,
+        selectedClips: JSON.parse(JSON.stringify(selectedClips.value)),
         panMode: panMode.value
       };
     };
