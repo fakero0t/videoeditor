@@ -86,17 +86,23 @@ const formatTime = (seconds) => {
 };
 
 // Keyboard shortcuts
+let lastKeyPressTime = 0;
 const handleKeyDown = (event) => {
-  console.log('TransportControls: Key pressed:', event.code, 'target:', event.target.tagName);
   if (event.code === 'Space' && !event.target.matches('input, textarea, select')) {
-    console.log('TransportControls: Spacebar detected, calling playPause');
+    // Prevent rapid key presses (debounce)
+    const now = Date.now();
+    if (now - lastKeyPressTime < 100) {
+      event.preventDefault();
+      return;
+    }
+    lastKeyPressTime = now;
+    
     event.preventDefault();
     playPause();
   }
 };
 
 onMounted(() => {
-  console.log('TransportControls: Component mounted, adding keydown listener');
   document.addEventListener('keydown', handleKeyDown);
 });
 

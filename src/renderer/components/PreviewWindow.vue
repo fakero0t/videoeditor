@@ -344,10 +344,7 @@ const formatTime = (seconds) => {
 
 // Playback control methods for the store
 const play = () => {
-  console.log('PreviewWindow: play() called, isTimelinePlayback:', isTimelinePlayback.value);
   const video = videoElement.value;
-  console.log('PreviewWindow: video element available:', !!video);
-  console.log('PreviewWindow: currentClip available:', !!currentClip.value);
   
   if (!video) {
     console.warn('PreviewWindow: Video element not available - component may not be mounted yet');
@@ -359,15 +356,7 @@ const play = () => {
     return;
   }
   
-  // For timeline playback, we don't need to call video.play() as the timeline
-  // playback loop will handle advancing the playhead and switching clips
-  if (isTimelinePlayback.value) {
-    console.log('PreviewWindow: Timeline playback mode - video will be controlled by timeline');
-    return;
-  }
-  
-  // For individual clip playback
-  console.log('PreviewWindow: Attempting to play video');
+  // Always play the video, whether in timeline playback mode or individual clip playback
   video.play().then(() => {
     console.log('PreviewWindow: Video play() succeeded');
   }).catch(error => {
@@ -376,7 +365,6 @@ const play = () => {
 };
 
 const pause = () => {
-  console.log('PreviewWindow: pause() called, isTimelinePlayback:', isTimelinePlayback.value);
   const video = videoElement.value;
   if (video) {
     video.pause();
@@ -424,8 +412,7 @@ watch(() => isTimelinePlayback.value, (isTimelinePlaying) => {
   if (!video || !currentClip.value) return;
   
   if (isTimelinePlaying) {
-    console.log('PreviewWindow: Timeline playback started - seeking to current position');
-    // Seek to the current position within the clip
+    // When timeline playback starts, seek to the current position within the clip
     const clip = currentClip.value;
     const relativeTime = timelineStore.playheadPosition - clip.startTime;
     
@@ -444,8 +431,11 @@ watch(() => [timelineStore.playheadPosition, isTimelinePlayback.value], ([newTim
   const relativeTime = newTime - clip.startTime;
   
   if (relativeTime >= 0 && relativeTime < clip.duration) {
-    // Only update if difference is significant (avoid unnecessary seeks)
-    if (Math.abs(video.currentTime - relativeTime) > 0.1) {
+    // During timeline playback, let the video play naturally and only seek when
+    // the timeline position is significantly different from the video position
+    const timeDiff = Math.abs(video.currentTime - relativeTime);
+    if (timeDiff > 0.5) {
+      // Only seek if the difference is more than 0.5 seconds
       video.currentTime = relativeTime;
     }
   }

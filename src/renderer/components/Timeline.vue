@@ -557,11 +557,9 @@ const handleMouseDown = (event) => {
   
   // Check for clip selection FIRST, before any other logic
   const clickedClip = getClipAtPosition(x, y);
-  console.log('Timeline: Click at', x, y, 'clickedClip:', clickedClip, 'panMode:', timelineStore.panMode);
   
   if (clickedClip) {
     // Always select clip (even in pan mode)
-    console.log('Timeline: Selecting clip:', clickedClip.id);
     clipSelectionManager.selectClip(clickedClip.id, event.ctrlKey);
     
     // Only start drag if not in pan mode

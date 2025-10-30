@@ -34,8 +34,6 @@ export const unregisterTimelineStore = () => {
 
 // Playback control methods
 export const play = () => {
-  console.log('PlaybackStore: play() called, previewWindowControls available:', !!previewWindowControls);
-  
   if (!timelineStore) {
     console.warn('PlaybackStore: No timeline store registered');
     return;
@@ -48,41 +46,60 @@ export const play = () => {
     return;
   }
   
+  // If already playing, don't start again
+  if (isPlaying.value && isTimelinePlayback.value) {
+    return;
+  }
+  
   // Start timeline playback
   isTimelinePlayback.value = true;
   isPlaying.value = true;
   
+  // Also play the video in the preview window if available
+  if (previewWindowControls) {
+    previewWindowControls.play();
+  }
+  
   // Start the timeline playback loop
   startTimelinePlayback();
-  
-  console.log('PlaybackStore: Timeline playback started');
 };
 
 export const pause = () => {
-  console.log('PlaybackStore: pause() called, previewWindowControls available:', !!previewWindowControls);
+  // If not playing, don't pause
+  if (!isPlaying.value && !isTimelinePlayback.value) {
+    return;
+  }
   
   // Stop timeline playback
   isTimelinePlayback.value = false;
   isPlaying.value = false;
   
+  // Cancel any pending animation frame
+  if (playbackAnimationId) {
+    cancelAnimationFrame(playbackAnimationId);
+    playbackAnimationId = null;
+  }
+  
   if (previewWindowControls) {
     previewWindowControls.pause();
-    console.log('PlaybackStore: pause() executed, isPlaying set to false');
   } else {
     console.warn('PlaybackStore: No preview window controls registered');
   }
 };
 
 export const stop = () => {
-  console.log('PlaybackStore: stop() called, previewWindowControls available:', !!previewWindowControls);
-  
   // Stop timeline playback
   isTimelinePlayback.value = false;
   isPlaying.value = false;
   
+  // Cancel any pending animation frame
+  if (playbackAnimationId) {
+    cancelAnimationFrame(playbackAnimationId);
+    playbackAnimationId = null;
+  }
+  
   if (previewWindowControls) {
     previewWindowControls.stop();
-    console.log('PlaybackStore: stop() executed, isPlaying set to false');
   } else {
     console.warn('PlaybackStore: No preview window controls registered');
   }

@@ -62,8 +62,10 @@ export class ClipForgeProjectService {
     // Add thumbnails
     mediaData.forEach(file => {
       if (file.thumbnailPath) {
+        // Find the original thumbnail path from the media store
+        const originalThumbnailPath = file.originalThumbnailPath || file.thumbnailPath;
         filesToCopy.push({
-          source: file.thumbnailPath.replace(`./${mediaFolder}/.thumbnails/`, ''), // Original path
+          source: originalThumbnailPath,
           destRelative: file.thumbnailPath,
           type: 'thumbnail'
         });

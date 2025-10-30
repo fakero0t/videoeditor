@@ -362,6 +362,13 @@ ipcMain.handle('project:save', async (event, projectPath, projectData, filesToCo
       const destPath = path.join(projectFolder, file.destRelative);
       
       try {
+        // Check if source file exists
+        try {
+          await fs.access(file.source);
+        } catch (accessError) {
+          throw new Error(`Source file does not exist: ${file.source}`);
+        }
+        
         // Copy file
         await fs.copyFile(file.source, destPath);
         copiedFiles.push(destPath);
@@ -376,7 +383,13 @@ ipcMain.handle('project:save', async (event, projectPath, projectData, filesToCo
         
       } catch (copyError) {
         console.error(`Failed to copy ${file.source}:`, copyError);
-        throw new Error(`Failed to copy file: ${path.basename(file.source)}`);
+        console.error('Copy error details:', {
+          source: file.source,
+          destination: destPath,
+          error: copyError.message,
+          code: copyError.code
+        });
+        throw new Error(`Failed to copy file: ${path.basename(file.source)} - ${copyError.message}`);
       }
     }
     
