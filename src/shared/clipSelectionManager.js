@@ -6,11 +6,14 @@ class ClipSelectionManager {
 
   // Select a single clip
   selectClip(clipId, addToSelection = false) {
+    console.log('ClipSelectionManager: selectClip called:', clipId, 'addToSelection:', addToSelection);
     if (!addToSelection) {
       this.clearSelection();
     }
     this.selectedClips.add(clipId);
     this.timelineStore.selectClip(clipId, addToSelection);
+    this.timelineStore.markDirty(); // Trigger re-render
+    console.log('ClipSelectionManager: After selection, selectedClips:', Array.from(this.selectedClips), 'timelineStore.selectedClips:', this.timelineStore.selectedClips);
   }
 
   // Deselect a clip
@@ -27,6 +30,7 @@ class ClipSelectionManager {
   clearSelection() {
     this.selectedClips.clear();
     this.timelineStore.clearSelection();
+    this.timelineStore.markDirty(); // Trigger re-render
   }
 
   // Check if clip is selected

@@ -38,7 +38,6 @@ class SplitManager {
     });
     
     // Update timeline
-    this.timelineStore.updateTimelineDuration();
     this.timelineStore.markDirty();
     
     return true;

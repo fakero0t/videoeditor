@@ -10,7 +10,7 @@
     </button>
     
     <button 
-      @click="stop" 
+      @click="stopPlayback" 
       :disabled="!hasClips"
       class="stop-btn"
     >
@@ -39,8 +39,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { ClipForgePlaybackManager } from '../../shared/clipforge/playbackManager';
-import { VideoPlayerPool } from '../../shared/videoPlayerPool';
+import { play, pause, stop, setPlaybackSpeed, isPlaying, playbackSpeed } from '../stores/playbackStore';
 import PanToggle from './PanToggle.vue';
 
 const props = defineProps({
@@ -51,17 +50,6 @@ const props = defineProps({
 });
 
 const timelineStore = useClipForgeTimelineStore();
-const videoPlayerPool = new VideoPlayerPool();
-
-// Create playback manager instance
-let playbackManager = null;
-
-onMounted(() => {
-  playbackManager = new ClipForgePlaybackManager(timelineStore, videoPlayerPool);
-});
-
-const isPlaying = ref(false);
-const playbackSpeed = ref(1);
 
 const hasClips = computed(() => {
   return timelineStore.tracks.some(track => track.clips.length > 0);
@@ -72,28 +60,22 @@ const currentTime = computed(() => timelineStore.playheadPosition);
 const totalDuration = computed(() => timelineStore.timelineDuration);
 
 const playPause = () => {
-  if (!playbackManager) return;
-  
+  console.log('TransportControls: playPause called, isPlaying:', isPlaying.value);
   if (isPlaying.value) {
-    playbackManager.pause();
-    isPlaying.value = false;
+    console.log('TransportControls: Calling pause()');
+    pause();
   } else {
-    playbackManager.play();
-    isPlaying.value = true;
+    console.log('TransportControls: Calling play()');
+    play();
   }
 };
 
-const stop = () => {
-  if (!playbackManager) return;
-  
-  playbackManager.stop();
-  isPlaying.value = false;
+const stopPlayback = () => {
+  stop();
 };
 
 const updateSpeed = () => {
-  if (!playbackManager) return;
-  
-  playbackManager.setPlaybackSpeed(parseFloat(playbackSpeed.value));
+  setPlaybackSpeed(parseFloat(playbackSpeed.value));
 };
 
 
@@ -105,21 +87,21 @@ const formatTime = (seconds) => {
 
 // Keyboard shortcuts
 const handleKeyDown = (event) => {
+  console.log('TransportControls: Key pressed:', event.code, 'target:', event.target.tagName);
   if (event.code === 'Space' && !event.target.matches('input, textarea, select')) {
+    console.log('TransportControls: Spacebar detected, calling playPause');
     event.preventDefault();
     playPause();
   }
 };
 
 onMounted(() => {
+  console.log('TransportControls: Component mounted, adding keydown listener');
   document.addEventListener('keydown', handleKeyDown);
 });
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown);
-  if (playbackManager) {
-    playbackManager.cleanup();
-  }
 });
 </script>
 

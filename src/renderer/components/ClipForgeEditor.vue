@@ -6,9 +6,6 @@
       <button @click="openExport" :disabled="!canExport" class="export-btn" title="Export Timeline">
         Export
       </button>
-      <button @click="openBrollSearch" class="search-btn" title="Search B-roll">
-        🔍 Search B-roll
-      </button>
       <button @click="openRecordingPanel" class="record-toggle-btn" title="Record">
         ● Record
       </button>
@@ -68,13 +65,6 @@
     <!-- Export Dialog -->
     <ExportDialog :visible="showExport" :app-mode="appMode" @close="showExport = false" />
     
-    <!-- B-roll Search Modal -->
-    <BrollSearchModal 
-      :visible="showBrollSearch" 
-      :app-mode="appMode" 
-      @close="showBrollSearch = false"
-      @insert-clip="handleClipInserted"
-    />
   </div>
 </template>
 
@@ -89,15 +79,13 @@ import SplitButton from './SplitButton.vue';
 import ProjectMenu from './ProjectMenu.vue';
 import RecordingPanel from './RecordingPanel.vue';
 import ExportDialog from './ExportDialog.vue';
-import BrollSearchModal from './BrollSearchModal.vue';
 import ResizeHandle from './ResizeHandle.vue';
 import { useClipForgeProjectStore } from '../stores/clipforge/projectStore';
 import { useClipForgeRecordingStore } from '../stores/clipforge/recordingStore';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
 import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
 import { useLayoutStore } from '../stores/layoutStore';
-import { ClipForgePlaybackManager } from '../../shared/clipforge/playbackManager';
-import { VideoPlayerPool } from '../../shared/videoPlayerPool';
+import { isPlaying } from '../stores/playbackStore';
 
 // Props
 const props = defineProps({
@@ -118,9 +106,6 @@ const mediaStore = useClipForgeMediaStore();
 const layoutStore = useLayoutStore();
 
 const showExport = ref(false);
-const showBrollSearch = ref(false);
-const videoPlayerPool = new VideoPlayerPool();
-let playbackManager = null;
 
 // Make project store globally available for timeline store
 window.__clipforgeProjectStore = projectStore;
@@ -135,23 +120,16 @@ const canExport = computed(() => {
 const openExport = () => {
   if (canExport.value) {
     // Pause playback if playing
-    if (playbackManager && playbackManager.isPlaying) {
-      playbackManager.pause();
+    if (isPlaying.value) {
+      // Import pause function dynamically to avoid circular dependency
+      import('../stores/playbackStore').then(({ pause }) => {
+        pause();
+      });
     }
     showExport.value = true;
   }
 };
 
-// Method to open B-roll search
-const openBrollSearch = () => {
-  showBrollSearch.value = true;
-};
-
-// Handle clip insertion from search
-const handleClipInserted = (clip) => {
-  console.log('Clip inserted from search:', clip.fileName);
-  // The modal already handles the insertion, this is just for logging/feedback
-};
 
 // Prevent close during save, recording, or with unsaved changes
 window.addEventListener('beforeunload', (e) => {
@@ -177,9 +155,6 @@ window.addEventListener('beforeunload', (e) => {
 onMounted(async () => {
   // Initialize layout store
   layoutStore.initialize();
-  
-  // Initialize playback manager
-  playbackManager = new ClipForgePlaybackManager(timelineStore, videoPlayerPool);
   
   // Update window title
   document.title = 'Forge - ClipForge';

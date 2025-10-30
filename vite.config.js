@@ -44,7 +44,18 @@ export default defineConfig({
   css: {
     preprocessorOptions: {
       scss: {
-        // SCSS options can be added here if needed
+        silenceDeprecations: ['legacy-js-api', 'import', 'color-functions', 'global-builtin'],
+        quietDeps: true,
+        api: 'modern-compiler',
+        logger: {
+          warn: function(message, options) {
+            // Suppress mixed-decls warnings
+            if (message.includes('mixed-decls deprecation is obsolete')) {
+              return;
+            }
+            console.warn(message);
+          }
+        }
       }
     }
   },

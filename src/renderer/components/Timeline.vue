@@ -37,7 +37,7 @@ import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
 import DragDropManager from '../../shared/dragDropManager';
 import ClipSelectionManager from '../../shared/clipSelectionManager';
 import GridSnapToggle from './GridSnapToggle.vue';
-import ScrubManager from '../../shared/scrubManager';
+import { setScrubbing, registerTimelineStore, unregisterTimelineStore } from '../stores/playbackStore';
 import PlayheadRenderer from '../../shared/playheadRenderer';
 import TimeDisplay from './TimeDisplay.vue';
 import TrimManager from '../../shared/trimManager';
@@ -68,7 +68,6 @@ let dragStartX = 0;
 let animationFrameId = null;
 let dragDropManager = null;
 let clipSelectionManager = null;
-let scrubManager = null;
 let playheadRenderer = null;
 let trimManager = null;
 let trimHandleRenderer = null;
@@ -99,8 +98,7 @@ onMounted(() => {
   dragDropManager = new DragDropManager(timelineStore, timelineCanvas.value);
   clipSelectionManager = new ClipSelectionManager(timelineStore);
   
-  // Initialize scrub and playhead managers
-  scrubManager = new ScrubManager(timelineStore, null); // videoPlayerPool will be set later
+  // Initialize playhead renderer
   playheadRenderer = new PlayheadRenderer(timelineCanvas.value, timelineStore);
   
   // Initialize trim managers
@@ -109,6 +107,9 @@ onMounted(() => {
   
   // Initialize split manager
   splitManager = new SplitManager(timelineStore, clipSelectionManager);
+  
+  // Register timeline store with playback store
+  registerTimelineStore(timelineStore);
   
   // Expose split indicator control
   window.setSplitIndicator = (show) => {
@@ -133,6 +134,9 @@ onUnmounted(() => {
   
   // Remove keyboard event listeners
   document.removeEventListener('keydown', handleKeyDown);
+  
+  // Unregister timeline store
+  unregisterTimelineStore();
   
   // Cleanup managers
   if (dragDropManager) {
@@ -551,7 +555,43 @@ const handleMouseDown = (event) => {
   const time = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
   timelineStore.setPlayheadPosition(time);
   
-  // NEW: Handle pan mode - Start panning
+  // Check for clip selection FIRST, before any other logic
+  const clickedClip = getClipAtPosition(x, y);
+  console.log('Timeline: Click at', x, y, 'clickedClip:', clickedClip, 'panMode:', timelineStore.panMode);
+  
+  if (clickedClip) {
+    // Always select clip (even in pan mode)
+    console.log('Timeline: Selecting clip:', clickedClip.id);
+    clipSelectionManager.selectClip(clickedClip.id, event.ctrlKey);
+    
+    // Only start drag if not in pan mode
+    if (!timelineStore.panMode) {
+      // Start drag from timeline
+      let trackId = null;
+      let currentY = 0;
+      for (let trackIndex = 0; trackIndex < timelineStore.tracks.length; trackIndex++) {
+        const track = timelineStore.tracks[trackIndex];
+        const trackHeight = track.height;
+        
+        if (y >= currentY && y <= currentY + trackHeight) {
+          trackId = track.id;
+          break;
+        }
+        currentY += trackHeight;
+      }
+      
+      if (trackId) {
+        dragDropManager.startDragFromTimeline(clickedClip, trackId, event);
+      }
+    }
+    // In pan mode, just select the clip but don't start dragging
+    return;
+  } else {
+    // Clear selection if clicking empty space
+    clipSelectionManager.clearSelection();
+  }
+  
+  // NEW: Handle pan mode - Start panning (only if no clip was clicked)
   if (timelineStore.panMode) {
     isPanning.value = true;
     panStartX.value = event.clientX;
@@ -579,8 +619,7 @@ const handleMouseDown = (event) => {
   // Check if clicking on playhead handle (STILL ALLOWED in pan mode)
   if (playheadRenderer && playheadRenderer.isOverHandle(x, y)) {
     isScrubbing.value = true;
-    const initialTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
-    scrubManager.startScrub(initialTime);
+    setScrubbing(true);
     document.body.style.cursor = 'grabbing';
     event.preventDefault();
     return;
@@ -589,41 +628,10 @@ const handleMouseDown = (event) => {
   // Check if clicking near playhead line (STILL ALLOWED in pan mode)
   if (playheadRenderer && playheadRenderer.isNearPlayhead(x, 5)) {
     isScrubbing.value = true;
-    const initialTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
-    scrubManager.startScrub(initialTime);
+    setScrubbing(true);
     document.body.style.cursor = 'grabbing';
     event.preventDefault();
     return;
-  }
-  
-  // MODIFIED: Don't allow clip selection/dragging in pan mode
-  if (!timelineStore.panMode) {
-    const clickedClip = getClipAtPosition(x, y);
-    if (clickedClip) {
-      // Select clip
-      clipSelectionManager.selectClip(clickedClip.id, event.ctrlKey);
-      
-      // Start drag from timeline
-      let trackId = null;
-      let currentY = 0;
-      for (let trackIndex = 0; trackIndex < timelineStore.tracks.length; trackIndex++) {
-        const track = timelineStore.tracks[trackIndex];
-        const trackHeight = track.height;
-        
-        if (y >= currentY && y <= currentY + trackHeight) {
-          trackId = track.id;
-          break;
-        }
-        currentY += trackHeight;
-      }
-      
-      if (trackId) {
-        dragDropManager.startDragFromTimeline(clickedClip, trackId, event);
-      }
-    } else {
-      // Clear selection if clicking empty space
-      clipSelectionManager.clearSelection();
-    }
   }
 };
 
@@ -649,7 +657,7 @@ const handleMouseMove = (event) => {
   // Handle scrubbing
   if (isScrubbing.value) {
     const newTime = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
-    scrubManager.updateScrub(newTime);
+    timelineStore.setPlayheadPosition(newTime);
     showTimeTooltip.value = true;
     tooltipPosition.value = { x, y };
     return;
@@ -731,7 +739,7 @@ const handleMouseUp = (event) => {
   
   // Handle scrubbing end
   if (isScrubbing.value) {
-    scrubManager.endScrub();
+    setScrubbing(false);
     isScrubbing.value = false;
     showTimeTooltip.value = false;
     document.body.style.cursor = 'default';
@@ -843,7 +851,7 @@ const handleDragLeave = (event) => {
 
 const handleMouseLeave = (event) => {
   if (isScrubbing.value) {
-    scrubManager.endScrub();
+    setScrubbing(false);
     isScrubbing.value = false;
     showTimeTooltip.value = false;
   }
@@ -886,9 +894,6 @@ const handleKeyDown = (event) => {
         0,
         timelineStore.playheadPosition - frameTime
       ));
-      if (scrubManager) {
-        scrubManager.updateVideoPreview(true);
-      }
       break;
       
     case 'ArrowRight':
@@ -897,25 +902,16 @@ const handleKeyDown = (event) => {
         timelineStore.timelineDuration,
         timelineStore.playheadPosition + frameTime
       ));
-      if (scrubManager) {
-        scrubManager.updateVideoPreview(true);
-      }
       break;
       
     case 'Home':
       event.preventDefault();
       timelineStore.setPlayheadPosition(0);
-      if (scrubManager) {
-        scrubManager.updateVideoPreview(true);
-      }
       break;
       
     case 'End':
       event.preventDefault();
       timelineStore.setPlayheadPosition(timelineStore.timelineDuration);
-      if (scrubManager) {
-        scrubManager.updateVideoPreview(true);
-      }
       break;
   }
 };
@@ -972,7 +968,12 @@ watch(() => timelineStore.selectedClips, () => {
 // Watch for pan mode changes to update cursor
 watch(() => timelineStore.panMode, (newPanMode) => {
   if (timelineCanvas.value) {
-    timelineCanvas.value.style.cursor = newPanMode ? 'grab' : 'default';
+    // Only set cursor to grab when not hovering over clips
+    if (newPanMode) {
+      timelineCanvas.value.style.cursor = 'grab';
+    } else {
+      timelineCanvas.value.style.cursor = 'default';
+    }
   }
 });
 </script>

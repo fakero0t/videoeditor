@@ -152,7 +152,7 @@ class TrimManager {
     clip.trimStart = newTrimStart;
     
     // Update timeline duration if needed
-    this.timelineStore.updateTimelineDuration();
+    this.timelineStore.markDirty();
   }
 
   // Trim right edge (out-point)
@@ -181,7 +181,7 @@ class TrimManager {
     clip.trimEnd = newTrimEnd;
     
     // Update timeline duration if needed
-    this.timelineStore.updateTimelineDuration();
+    this.timelineStore.markDirty();
   }
 
   // End trim operation

@@ -64,7 +64,7 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { VideoPlayerPool } from '../../shared/videoPlayerPool';
+import { registerPreviewControls, unregisterPreviewControls, isPlaying, playbackSpeed, setScrubbing, isTimelinePlayback } from '../stores/playbackStore';
 import MultiTrackCompositor from '../../shared/multiTrackCompositor';
 
 const props = defineProps({
@@ -77,7 +77,6 @@ const props = defineProps({
 const timelineStore = useClipForgeTimelineStore();
 const previewContainer = ref(null);
 const videoElement = ref(null);
-const playerPool = new VideoPlayerPool();
 const compositor = new MultiTrackCompositor();
 
 // Natural video dimensions and container observer for responsive fitting
@@ -87,7 +86,6 @@ const containerSize = ref({ width: 0, height: 0 });
 let resizeObserver = null;
 
 const currentTime = ref(0);
-const isPlaying = ref(false);
 const videoAspectRatio = ref(16/9);
 const isLoading = ref(false);
 const hasError = ref(false);
@@ -98,6 +96,8 @@ const currentClip = computed(() => {
   // Use multi-track compositor to find the best clip to display
   // Priority: Topmost track > Lower tracks
   const compositeInfo = compositor.getCompositeInfo(timelineStore.tracks, playheadTime);
+  
+  console.log('PreviewWindow: currentClip computed - playheadTime:', playheadTime, 'primaryClip:', compositeInfo.primaryClip);
   
   return compositeInfo.primaryClip;
 });
@@ -111,25 +111,51 @@ const buildFileUrl = (absPath) => {
 
 const videoSrc = computed(() => {
   if (!currentClip.value?.filePath) {
+    console.log('PreviewWindow: No currentClip or filePath');
     return '';
   }
   
   // Convert file path to proper file:// URL for Electron
   const filePath = currentClip.value.filePath;
+  console.log('PreviewWindow: Processing filePath:', filePath);
   
   // Check if it's already a file:// URL
   if (filePath.startsWith('file://')) {
+    console.log('PreviewWindow: Already file:// URL:', filePath);
     return filePath;
   }
   
-  // Convert absolute path to file:// URL
+  // Handle absolute paths (imported files)
   if (filePath.startsWith('/')) {
     const fileUrl = buildFileUrl(filePath);
+    console.log('PreviewWindow: Converted absolute path to file:// URL:', fileUrl);
     return fileUrl;
   }
   
-  // For relative paths, convert to absolute first
+  // Handle relative project paths (saved projects)
+  if (filePath.startsWith('./')) {
+    // For relative paths, we need to resolve them to absolute paths
+    // In Electron, we can use the project path to resolve relative paths
+    const projectPath = window.__clipforgeProjectStore?.currentProjectPath;
+    if (projectPath) {
+      const projectDir = projectPath.replace(/[^/]*$/, ''); // Remove filename, keep directory
+      const absolutePath = filePath.replace('./', projectDir);
+      const fileUrl = buildFileUrl(absolutePath);
+      console.log('PreviewWindow: Resolved relative path to absolute and converted to file:// URL:', fileUrl);
+      return fileUrl;
+    } else {
+      console.error('PreviewWindow: No project path available to resolve relative path:', filePath);
+      // Try to resolve relative to current working directory as fallback
+      const absolutePath = filePath.replace('./', process.cwd() + '/');
+      const fileUrl = buildFileUrl(absolutePath);
+      console.log('PreviewWindow: Fallback resolution using cwd:', fileUrl);
+      return fileUrl;
+    }
+  }
+  
+  // Fallback: try to convert as-is (shouldn't happen)
   const fileUrl = buildFileUrl(filePath);
+  console.log('PreviewWindow: Fallback conversion to file:// URL:', fileUrl);
   return fileUrl;
 });
 
@@ -173,6 +199,13 @@ watch([currentClip, () => videoSrc.value, isLoading, hasError],
 const onVideoLoaded = () => {
   const video = videoElement.value;
   if (!video) return;
+  
+  console.log('PreviewWindow: Video loaded successfully', {
+    src: video.src,
+    videoWidth: video.videoWidth,
+    videoHeight: video.videoHeight,
+    duration: video.duration
+  });
   
   // Ensure audio is enabled
   video.muted = false;
@@ -227,10 +260,12 @@ const onVideoCanPlay = () => {
 };
 
 const onVideoPlay = () => {
+  // Video started playing - update store
   isPlaying.value = true;
 };
 
 const onVideoPause = () => {
+  // Video paused - update store
   isPlaying.value = false;
 };
 
@@ -246,11 +281,28 @@ const onVideoError = (event) => {
   const video = event.target;
   const error = video.error;
   
-  console.error('Video playback error:', error?.message || 'Unknown error');
+  console.error('Video playback error:', {
+    error: error?.message || 'Unknown error',
+    errorCode: error?.code,
+    networkState: video.networkState,
+    readyState: video.readyState,
+    src: video.src,
+    currentSrc: video.currentSrc,
+    originalFilePath: currentClip.value?.filePath,
+    computedVideoSrc: videoSrc.value
+  });
   
   // Additional debugging for common issues
   if (error?.code === 4) {
     console.error('DEMUXER_ERROR: Video file format not supported or corrupted');
+    console.error('File path being used:', video.src);
+    console.error('Original file path:', currentClip.value?.filePath);
+  }
+  
+  if (error?.code === 1) {
+    console.error('MEDIA_ELEMENT_ERROR: Empty src attribute');
+    console.error('Video src:', video.src);
+    console.error('Computed video src:', videoSrc.value);
   }
   
   isLoading.value = false;
@@ -263,6 +315,12 @@ const onTimeUpdate = () => {
   if (now - lastTimeUpdate > 33) { // 30fps throttling
     if (videoElement.value) {
       currentTime.value = videoElement.value.currentTime;
+      
+      // During playback, let the video drive the playhead
+      if (isPlaying.value && currentClip.value) {
+        const absoluteTime = currentClip.value.startTime + videoElement.value.currentTime;
+        timelineStore.setPlayheadPosition(absoluteTime);
+      }
     }
     lastTimeUpdate = now;
   }
@@ -284,10 +342,103 @@ const formatTime = (seconds) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
-// Watch for timeline changes
+// Playback control methods for the store
+const play = () => {
+  console.log('PreviewWindow: play() called, isTimelinePlayback:', isTimelinePlayback.value);
+  const video = videoElement.value;
+  console.log('PreviewWindow: video element available:', !!video);
+  console.log('PreviewWindow: currentClip available:', !!currentClip.value);
+  
+  if (!video) {
+    console.warn('PreviewWindow: Video element not available - component may not be mounted yet');
+    return;
+  }
+  
+  if (!currentClip.value) {
+    console.warn('PreviewWindow: No clip selected - please select a clip on the timeline first');
+    return;
+  }
+  
+  // For timeline playback, we don't need to call video.play() as the timeline
+  // playback loop will handle advancing the playhead and switching clips
+  if (isTimelinePlayback.value) {
+    console.log('PreviewWindow: Timeline playback mode - video will be controlled by timeline');
+    return;
+  }
+  
+  // For individual clip playback
+  console.log('PreviewWindow: Attempting to play video');
+  video.play().then(() => {
+    console.log('PreviewWindow: Video play() succeeded');
+  }).catch(error => {
+    console.warn('PreviewWindow: Could not play video:', error);
+  });
+};
+
+const pause = () => {
+  console.log('PreviewWindow: pause() called, isTimelinePlayback:', isTimelinePlayback.value);
+  const video = videoElement.value;
+  if (video) {
+    video.pause();
+  }
+};
+
+const stop = () => {
+  const video = videoElement.value;
+  if (video) {
+    video.pause();
+    video.currentTime = 0;
+    timelineStore.setPlayheadPosition(0);
+  }
+};
+
+const setPlaybackSpeed = (speed) => {
+  const video = videoElement.value;
+  if (video) {
+    video.playbackRate = speed;
+  }
+};
+
+// Watch for timeline changes - only seek during scrubbing, not during timeline playback
 watch(() => timelineStore.playheadPosition, (newTime) => {
   const video = videoElement.value;
   if (!video || !currentClip.value) return;
+  
+  // Only seek if we're not in timeline playback mode (i.e., during scrubbing)
+  if (isTimelinePlayback.value) return;
+  
+  const clip = currentClip.value;
+  const relativeTime = newTime - clip.startTime;
+  
+  if (relativeTime >= 0 && relativeTime < clip.duration) {
+    // Only update if difference is significant (avoid unnecessary seeks)
+    if (Math.abs(video.currentTime - relativeTime) > 0.1) {
+      video.currentTime = relativeTime;
+    }
+  }
+});
+
+// Watch for timeline playback mode changes
+watch(() => isTimelinePlayback.value, (isTimelinePlaying) => {
+  const video = videoElement.value;
+  if (!video || !currentClip.value) return;
+  
+  if (isTimelinePlaying) {
+    console.log('PreviewWindow: Timeline playback started - seeking to current position');
+    // Seek to the current position within the clip
+    const clip = currentClip.value;
+    const relativeTime = timelineStore.playheadPosition - clip.startTime;
+    
+    if (relativeTime >= 0 && relativeTime < clip.duration) {
+      video.currentTime = relativeTime;
+    }
+  }
+});
+
+// Watch for playhead position changes during timeline playback
+watch(() => [timelineStore.playheadPosition, isTimelinePlayback.value], ([newTime, isTimelinePlaying]) => {
+  const video = videoElement.value;
+  if (!video || !currentClip.value || !isTimelinePlaying) return;
   
   const clip = currentClip.value;
   const relativeTime = newTime - clip.startTime;
@@ -301,19 +452,32 @@ watch(() => timelineStore.playheadPosition, (newTime) => {
 });
 
 watch(() => currentClip.value, async (newClip, oldClip) => {
+  console.log('PreviewWindow: currentClip changed', { newClip, oldClip });
+  
   if (newClip && newClip.id !== oldClip?.id) {
     isLoading.value = true;
     hasError.value = false;
-    isPlaying.value = false;
+    isPlaying.value = false; // Stop playback when switching clips
     
     await nextTick();
     
     // Update video source only if it actually changed
     if (videoElement.value) {
       const newSrc = videoSrc.value;
+      console.log('PreviewWindow: Setting video src to:', newSrc);
+      console.log('PreviewWindow: Current video src:', videoElement.value.src);
+      
+      if (!newSrc) {
+        console.error('PreviewWindow: Empty video src, cannot load video');
+        hasError.value = true;
+        isLoading.value = false;
+        return;
+      }
+      
       if (videoElement.value.src !== newSrc) {
         videoElement.value.src = newSrc;
         videoElement.value.load();
+        console.log('PreviewWindow: Video src set and load() called');
       }
       // Ensure audio is enabled
       videoElement.value.muted = false;
@@ -323,6 +487,7 @@ watch(() => currentClip.value, async (newClip, oldClip) => {
     }
   } else if (!newClip) {
     // No clip selected - clear all states
+    console.log('PreviewWindow: No clip selected, clearing video');
     if (videoElement.value) {
       videoElement.value.pause();
       videoElement.value.src = '';
@@ -335,10 +500,22 @@ watch(() => currentClip.value, async (newClip, oldClip) => {
 });
 
 onMounted(() => {
+  console.log('PreviewWindow: Component mounted');
+  console.log('PreviewWindow: videoElement ref on mount:', videoElement.value);
+  console.log('PreviewWindow: currentClip on mount:', currentClip.value);
+  
   // Initialize video element
   if (currentClip.value) {
     isLoading.value = true;
   }
+
+  // Register playback controls with the store
+  registerPreviewControls({
+    play,
+    pause,
+    stop,
+    setPlaybackSpeed
+  });
 
   // Initialize container size + observer for responsive fitting
   if (previewContainer.value) {
@@ -353,8 +530,10 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  // Cleanup video players
-  playerPool.cleanup();
+  // Unregister playback controls
+  unregisterPreviewControls();
+  
+  // Cleanup compositor
   compositor.cleanup();
 
   // Cleanup observer
