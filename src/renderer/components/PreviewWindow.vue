@@ -64,7 +64,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
 import MultiTrackCompositor from '../../shared/multiTrackCompositor';
 
@@ -75,9 +74,7 @@ const props = defineProps({
   }
 });
 
-const timelineStore = props.appMode === 'clipforge' 
-  ? useClipForgeTimelineStore() 
-  : useAudioForgeTimelineStore();
+const timelineStore = useClipForgeTimelineStore();
 const previewContainer = ref(null);
 const videoElement = ref(null);
 const playerPool = new VideoPlayerPool();
@@ -249,24 +246,11 @@ const onVideoError = (event) => {
   const video = event.target;
   const error = video.error;
   
-  console.error('Video playback error:', {
-    event,
-    error,
-    errorCode: error?.code,
-    errorMessage: error?.message,
-    networkState: video.networkState,
-    readyState: video.readyState,
-    src: video.src,
-    currentSrc: video.currentSrc,
-    originalFilePath: currentClip.value?.filePath,
-    computedVideoSrc: videoSrc.value
-  });
+  console.error('Video playback error:', error?.message || 'Unknown error');
   
   // Additional debugging for common issues
   if (error?.code === 4) {
-    console.error('DEMUXER_ERROR: This usually means the video file format is not supported or the file is corrupted');
-    console.error('File path being used:', video.src);
-    console.error('Original file path:', currentClip.value?.filePath);
+    console.error('DEMUXER_ERROR: Video file format not supported or corrupted');
   }
   
   isLoading.value = false;

@@ -1,29 +1,19 @@
 import clipforgeFFmpegService from '../../shared/clipforge/ffmpegService';
-import audioforgeFFmpegService from '../../shared/audioforge/ffmpegService';
 import { isVideoFile, isAudioFile } from '../../shared/utils/videoUtils';
 
 class ImportService {
   constructor(appMode = 'clipforge') {
     this.appMode = appMode;
-    this.supportedExtensions = appMode === 'voiceforge' 
-      ? ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.opus', '.flac', '.wma', '.aiff']
-      : ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v', '.mpg', '.mpeg'];
-    this.ffmpegService = appMode === 'clipforge' 
-      ? clipforgeFFmpegService 
-      : audioforgeFFmpegService;
+    this.supportedExtensions = ['.mp4', '.mov', '.webm', '.avi', '.mkv', '.m4v', '.mpg', '.mpeg'];
+    this.ffmpegService = clipforgeFFmpegService;
   }
 
   async openFileDialog() {
     try {
-      const filters = this.appMode === 'voiceforge'
-        ? [
-            { name: 'Audio Files', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'flac', 'wma', 'aiff'] },
-            { name: 'All Files', extensions: ['*'] }
-          ]
-        : [
-            { name: 'Video Files', extensions: ['mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v', 'mpg', 'mpeg'] },
-            { name: 'All Files', extensions: ['*'] }
-          ];
+      const filters = [
+        { name: 'Video Files', extensions: ['mp4', 'mov', 'webm', 'avi', 'mkv', 'm4v', 'mpg', 'mpeg'] },
+        { name: 'All Files', extensions: ['*'] }
+      ];
       
       const result = await window.electronAPI.openFiles({
         filters,
@@ -75,14 +65,11 @@ class ImportService {
   validateFile(filePath) {
     const fileName = filePath.split('/').pop();
     
-    // Check if it's a video file (clipforge) or audio file (voiceforge)
-    const isValid = this.appMode === 'voiceforge' 
-      ? isAudioFile(fileName) 
-      : isVideoFile(fileName);
+    // Check if it's a video file
+    const isValid = isVideoFile(fileName);
     
     if (!isValid) {
-      const expectedType = this.appMode === 'voiceforge' ? 'audio' : 'video';
-      throw new Error(`Unsupported file format: ${fileName}. Expected ${expectedType} file.`);
+      throw new Error(`Unsupported file format: ${fileName}. Expected video file.`);
     }
     
     // Additional validations can be added here
@@ -101,7 +88,6 @@ class ImportService {
       try {
         thumbnailPath = await this.ffmpegService.generateThumbnail(filePath, 1);
       } catch (error) {
-        console.warn('Failed to generate thumbnail:', error);
         // Continue without thumbnail
       }
       
@@ -129,9 +115,7 @@ class ImportService {
     const invalidFiles = [];
     
     for (const file of files) {
-      const isValid = this.appMode === 'voiceforge' 
-        ? isAudioFile(file.name) 
-        : isVideoFile(file.name);
+      const isValid = isVideoFile(file.name);
       
       if (isValid) {
         validFiles.push(file);

@@ -33,9 +33,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
-import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
 import DragDropManager from '../../shared/dragDropManager';
 import ClipSelectionManager from '../../shared/clipSelectionManager';
 import GridSnapToggle from './GridSnapToggle.vue';
@@ -54,13 +52,8 @@ const props = defineProps({
   }
 });
 
-const timelineStore = props.appMode === 'clipforge' 
-  ? useClipForgeTimelineStore() 
-  : useAudioForgeTimelineStore();
-
-const mediaStore = props.appMode === 'clipforge' 
-  ? useClipForgeMediaStore() 
-  : useAudioForgeMediaStore();
+const timelineStore = useClipForgeTimelineStore();
+const mediaStore = useClipForgeMediaStore();
 const timelineCanvas = ref(null);
 const timeRuler = ref(null);
 const timelineContent = ref(null);
@@ -494,15 +487,6 @@ const zoomIn = (mouseX = null) => {
       const canvasCenter = canvasWidth.value / 2;
       const newScrollPosition = Math.max(0, playheadPixelPosition - canvasCenter);
       
-      console.log('Zoom in around playhead:', {
-        playheadTime,
-        oldZoom: timelineStore.zoomLevel,
-        newZoom: newZoomLevel,
-        playheadPixelPosition,
-        canvasCenter,
-        oldScroll: timelineStore.scrollPosition,
-        newScroll: newScrollPosition
-      });
       
       // Apply changes atomically
       timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
@@ -543,15 +527,6 @@ const zoomOut = (mouseX = null) => {
       const canvasCenter = canvasWidth.value / 2;
       const newScrollPosition = Math.max(0, playheadPixelPosition - canvasCenter);
       
-      console.log('Zoom out around playhead:', {
-        playheadTime,
-        oldZoom: timelineStore.zoomLevel,
-        newZoom: newZoomLevel,
-        playheadPixelPosition,
-        canvasCenter,
-        oldScroll: timelineStore.scrollPosition,
-        newScroll: newScrollPosition
-      });
       
       // Apply changes atomically
       timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);
@@ -571,6 +546,10 @@ const handleMouseDown = (event) => {
   const rect = timelineCanvas.value.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
+  
+  // Always position playhead on click (before any early returns)
+  const time = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
+  timelineStore.setPlayheadPosition(time);
   
   // NEW: Handle pan mode - Start panning
   if (timelineStore.panMode) {
@@ -644,15 +623,7 @@ const handleMouseDown = (event) => {
     } else {
       // Clear selection if clicking empty space
       clipSelectionManager.clearSelection();
-      
-      // Position playhead
-      const time = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
-      timelineStore.setPlayheadPosition(time);
     }
-  } else {
-    // In pan mode, just position playhead
-    const time = (x + timelineStore.scrollPosition) / timelineStore.pixelsPerSecond;
-    timelineStore.setPlayheadPosition(time);
   }
 };
 
@@ -699,7 +670,6 @@ const handleMouseMove = (event) => {
   );
   
   if (hoverState) {
-    console.log('Trim hover detected:', hoverState);
     document.body.style.cursor = trimManager.getCursorForEdge(hoverState.edge);
     currentTrimState.value = hoverState;
     renderTimeline(); // Re-render to show hover state
@@ -806,15 +776,6 @@ const handleWheel = (event) => {
       // Calculate new scroll position to keep playhead at canvas center
       const newScrollPosition = Math.max(0, playheadPixelPosition - canvasCenter);
       
-      console.log('Zoom around playhead:', {
-        playheadTime,
-        oldZoom: timelineStore.zoomLevel,
-        newZoom: newZoomLevel,
-        playheadPixelPosition,
-        canvasCenter,
-        oldScroll: timelineStore.scrollPosition,
-        newScroll: newScrollPosition
-      });
       
       // Apply changes atomically
       timelineStore.setZoomAndScroll(newZoomLevel, newScrollPosition);

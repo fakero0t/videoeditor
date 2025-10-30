@@ -17,26 +17,15 @@ class MultiTrackCompositor {
    * @returns {Array} Array of active clips with track info
    */
   getActiveClipsAtTime(tracks, time) {
-    console.log('[Compositor] getActiveClipsAtTime called:', { time, trackCount: tracks.length });
     const activeClips = [];
     
     tracks.forEach(track => {
-      console.log('[Compositor] Checking track:', track.id, 'clips:', track.clips.length);
       const clip = track.clips.find(c => {
         const isInRange = c.startTime <= time && c.startTime + c.duration >= time;
-        console.log('[Compositor] Clip check:', {
-          clipId: c.id,
-          startTime: c.startTime,
-          duration: c.duration,
-          endTime: c.startTime + c.duration,
-          playheadTime: time,
-          isInRange
-        });
         return isInRange;
       });
       
       if (clip) {
-        console.log('[Compositor] Found active clip:', clip.id);
         activeClips.push({
           clip,
           trackId: track.id,
@@ -46,7 +35,6 @@ class MultiTrackCompositor {
       }
     });
     
-    console.log('[Compositor] Active clips found:', activeClips.length);
     // Sort by track index (lower tracks first, higher tracks overlay on top)
     return activeClips.sort((a, b) => a.trackIndex - b.trackIndex);
   }

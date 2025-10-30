@@ -34,13 +34,13 @@
                 </li>
                 
                 <li v-if="platform.isMac">
-                  Enable the checkbox next to {{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }}
+                  Enable the checkbox next to ClipForge
                 </li>
                 <li v-else-if="platform.isWindows">
-                  Enable {{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }} in the list
+                  Enable ClipForge in the list
                 </li>
                 
-                <li>Restart {{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }}</li>
+                <li>Restart ClipForge</li>
               </ol>
             </div>
           </div>
@@ -50,7 +50,7 @@
           <div class="permission-icon">🎤</div>
           <div class="permission-info">
             <h4>Microphone Permission</h4>
-            <p>{{ appMode === 'clipforge' ? 'ClipForge' : 'AudioForge' }} needs permission to record audio from your microphone.</p>
+            <p>ClipForge needs permission to record audio from your microphone.</p>
             
             <div class="instructions">
               <p><strong>To grant permission:</strong></p>

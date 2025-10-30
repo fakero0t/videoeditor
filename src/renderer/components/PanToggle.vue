@@ -12,7 +12,6 @@
 <script setup>
 import { onMounted, onUnmounted } from 'vue';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 
 const props = defineProps({
   appMode: {
@@ -21,9 +20,7 @@ const props = defineProps({
   }
 });
 
-const timelineStore = props.appMode === 'clipforge' 
-  ? useClipForgeTimelineStore() 
-  : useAudioForgeTimelineStore();
+const timelineStore = useClipForgeTimelineStore();
 
 const togglePan = () => {
   timelineStore.setPanMode(!timelineStore.panMode);

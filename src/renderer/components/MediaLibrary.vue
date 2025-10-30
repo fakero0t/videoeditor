@@ -138,9 +138,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useClipForgeMediaStore } from '../stores/clipforge/mediaStore';
-import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import ImportService from '../services/importService';
 import { brollSearchService } from '../services/brollSearchService';
 import { formatDuration, formatFileSize, getVideoCodecName } from '../../shared/utils/videoUtils';
@@ -153,13 +151,8 @@ const props = defineProps({
   }
 });
 
-const mediaStore = props.appMode === 'clipforge' 
-  ? useClipForgeMediaStore() 
-  : useAudioForgeMediaStore();
-
-const timelineStore = props.appMode === 'clipforge' 
-  ? useClipForgeTimelineStore() 
-  : useAudioForgeTimelineStore();
+const mediaStore = useClipForgeMediaStore();
+const timelineStore = useClipForgeTimelineStore();
 
 const importService = new ImportService(props.appMode);
 const isDragOver = ref(false);
@@ -173,19 +166,19 @@ let indexingInterval = null;
 
 // Computed properties for dynamic text based on appMode
 const libraryTitle = computed(() => {
-  return props.appMode === 'voiceforge' ? 'Audio Library' : 'Media Library';
+  return 'Media Library';
 });
 
 const dropMessage = computed(() => {
-  return props.appMode === 'voiceforge' ? 'Drop audio files to import' : 'Drop video files to import';
+  return 'Drop video files to import';
 });
 
 const emptyStateTitle = computed(() => {
-  return props.appMode === 'voiceforge' ? 'No audio files yet' : 'No media files yet';
+  return 'No media files yet';
 });
 
 const emptyStateDescription = computed(() => {
-  return props.appMode === 'voiceforge' ? 'Import audio files to get started' : 'Import video files to get started';
+  return 'Import video files to get started';
 });
 
 // File picker button
@@ -356,7 +349,6 @@ const handleGlobalDragLeave = (event) => {
 // Media actions
 const selectClip = (clip) => {
   selectedClip.value = clip.id;
-  console.log('Selected clip:', clip);
   
   // Validate clip data before adding to timeline
   if (!clip || !clip.filePath || !clip.fileName) {
@@ -376,9 +368,7 @@ const selectClip = (clip) => {
   const height = parseFloat(clip.height) || 1080;
   
   // Add clip to timeline at current playhead position
-  const timelineStore = props.appMode === 'clipforge' 
-    ? useClipForgeTimelineStore() 
-    : useAudioForgeTimelineStore();
+  const timelineStore = useClipForgeTimelineStore();
   const playheadTime = timelineStore.playheadPosition;
   
   // Add to track 1 (main track)
@@ -395,13 +385,6 @@ const selectClip = (clip) => {
       endTime: playheadTime + duration
     });
     
-    console.log('Added clip to timeline:', {
-      trackId,
-      startTime: playheadTime,
-      duration: duration,
-      width: width,
-      height: height
-    });
   } else {
     console.error('No track available to add clip');
   }

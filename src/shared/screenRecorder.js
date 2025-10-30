@@ -3,71 +3,19 @@ import { VideoCompositor } from './videoCompositor.js';
 // Diagnostic logging for screen recording
 class ScreenRecordingDiagnostics {
   logRecordingAttempt(source, options) {
-    console.group('[Recording] Starting Recording Attempt');
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('Source:', {
-      id: source?.id,
-      name: source?.name,
-      type: source?.type
-    });
-    console.log('Quality:', options?.quality);
-    console.log('Microphone:', options?.microphoneSource?.label || 'None');
-    console.groupEnd();
+    // Logging removed for cleaner console output
   }
   
   logStreamInfo(stream) {
-    console.group('[Recording] Stream Information');
-    
-    const videoTracks = stream.getVideoTracks();
-    const audioTracks = stream.getAudioTracks();
-    
-    console.log('Video Tracks:', videoTracks.length);
-    videoTracks.forEach((track, index) => {
-      const settings = track.getSettings();
-      console.log(`  Video Track ${index + 1}:`, {
-        label: track.label,
-        enabled: track.enabled,
-        muted: track.muted,
-        readyState: track.readyState,
-        width: settings.width,
-        height: settings.height,
-        frameRate: settings.frameRate,
-        deviceId: settings.deviceId
-      });
-    });
-    
-    console.log('Audio Tracks:', audioTracks.length);
-    audioTracks.forEach((track, index) => {
-      console.log(`  Audio Track ${index + 1}:`, {
-        label: track.label,
-        enabled: track.enabled,
-        muted: track.muted,
-        readyState: track.readyState
-      });
-    });
-    
-    console.groupEnd();
+    // Logging removed for cleaner console output
   }
   
   logRecordingSuccess(duration, fileSize, filePath) {
-    console.group('[Recording] Completed Successfully');
-    console.log('Duration:', `${duration.toFixed(2)}s`);
-    console.log('File Size:', `${(fileSize / 1024 / 1024).toFixed(2)}MB`);
-    console.log('File Path:', filePath);
-    console.log('Timestamp:', new Date().toISOString());
-    console.groupEnd();
+    // Logging removed for cleaner console output
   }
   
   logRecordingError(error, context) {
-    console.group('[Recording] Error Occurred');
-    console.error('Error Name:', error.name);
-    console.error('Error Message:', error.message);
-    console.error('Context:', context);
-    if (error.stack) {
-      console.error('Stack:', error.stack);
-    }
-    console.error('Timestamp:', new Date().toISOString());
-    console.groupEnd();
+    console.error('Recording error:', error.message);
   }
 }
 
@@ -125,7 +73,6 @@ export class ScreenRecorder {
   async validateRecordingRequirements(screenSource, microphoneSource) {
     const errors = [];
     
-    console.log('[Validation] Checking recording requirements...');
     
     // 1. Validate source exists and has correct format
     if (!screenSource) {
@@ -145,7 +92,6 @@ export class ScreenRecorder {
           errors.push(`Selected source no longer available: ${screenSource.name || screenSource.id}`);
         }
       } catch (error) {
-        console.warn('[Validation] Could not verify source availability:', error);
         // Don't block on this check
       }
     }
@@ -160,18 +106,15 @@ export class ScreenRecorder {
       
       if (!permissions.screen && !hasSourcesInList) {
         // Only add error if BOTH permission API says no AND we couldn't verify source
-        console.warn('[Validation] Screen permission may be missing');
         errors.push('Screen recording permission not granted');
       } else if (!permissions.screen && hasSourcesInList) {
         // Permission API says no, but we have sources - trust the sources
-        console.log('[Validation] Permission API says no, but source list indicates permission is granted');
       }
       
       if (microphoneSource && !permissions.microphone) {
         errors.push('Microphone permission not granted');
       }
     } catch (error) {
-      console.warn('[Validation] Permission check failed:', error);
       // Don't block on permission check failure - we'll find out when we try to get stream
     }
     
@@ -185,7 +128,6 @@ export class ScreenRecorder {
         errors.push(`Insufficient disk space. Need ${requiredGB}GB, have ${availableGB}GB available`);
       }
     } catch (error) {
-      console.warn('[Validation] Disk space check failed:', error);
       // Don't block on disk space check failure
     }
     
@@ -194,14 +136,8 @@ export class ScreenRecorder {
     if (!supportedCodec) {
       errors.push('No supported video codec found. Video recording may not work.');
     } else {
-      console.log('[Validation] Will use codec:', supportedCodec);
     }
     
-    console.log('[Validation] Results:', {
-      valid: errors.length === 0,
-      errorCount: errors.length,
-      errors: errors
-    });
     
     return {
       valid: errors.length === 0,
@@ -235,19 +171,12 @@ export class ScreenRecorder {
       this.diagnostics.logRecordingAttempt(screenSource, { quality, microphoneSource });
       
       // Validate requirements before starting
-      console.log('[Recording] Validating requirements...');
       const validation = await this.validateRecordingRequirements(screenSource, microphoneSource);
       if (!validation.valid) {
         const errorMsg = 'Recording validation failed:\n• ' + validation.errors.join('\n• ');
         throw new Error(errorMsg);
       }
-      console.log('[Recording] Validation passed');
       
-      console.log('Starting screen recording with source:', {
-        id: screenSource.id,
-        name: screenSource.name,
-        type: screenSource.type
-      });
       
       // Validate screen source
       if (!screenSource.id) {
@@ -255,29 +184,19 @@ export class ScreenRecorder {
       }
       
       if (!screenSource.id.startsWith('screen:') && !screenSource.id.startsWith('window:')) {
-        console.warn('Screen source ID format may be incorrect:', screenSource.id);
       }
       
       // Get screen stream
       const videoConstraints = this.getVideoConstraints(quality);
-      console.log('[Recording] Video quality constraints:', videoConstraints);
 
       // Validate screen source ID format
       if (!screenSource.id) {
         throw new Error('Screen source ID is required');
       }
 
-      console.log('[Recording] Requesting screen capture for source:', {
-        id: screenSource.id,
-        name: screenSource.name,
-        type: screenSource.type
-      });
 
       // CRITICAL FIX: Electron desktopCapturer REQUIRES mandatory constraints
       // The mandatory object is NOT optional - without it, getUserMedia falls back to webcam
-      console.log('[Recording] Using getUserMedia with Electron desktopCapturer constraints');
-      console.log('[Recording] Source ID being used:', screenSource.id);
-      console.log('[Recording] Video constraints:', videoConstraints);
       
       const screenStream = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -288,54 +207,27 @@ export class ScreenRecorder {
           }
         }
       }).catch(async (error) => {
-        console.error('[Recording] getUserMedia FAILED with mandatory constraints');
-        console.error('[Recording] Error name:', error.name);
-        console.error('[Recording] Error message:', error.message);
-        console.error('[Recording] Constraint:', error.constraint);
-        console.error('[Recording] Source that failed:', {
-          id: screenSource.id,
-          name: screenSource.name,
-          type: screenSource.type
-        });
+        console.error('[Recording] getUserMedia failed:', error.message);
         
         // Log ALL available sources to compare
         try {
           const allSources = await window.electronAPI.recording.getDesktopSources();
-          console.error('[Recording] Available sources at time of failure:');
-          allSources.forEach(s => {
-            console.error(`  - ${s.type}: ${s.name} (id: ${s.id})`);
-          });
         } catch (e) {
-          console.error('[Recording] Could not fetch sources for comparison:', e);
         }
         
         throw new Error(`Failed to capture screen: ${error.message}. Check that the source ID is correct and permission is granted.`);
       });
 
-      console.log('[Recording] Screen stream obtained successfully');
-      console.log('[Recording] Stream details:', {
-        videoTracks: screenStream.getVideoTracks().length,
-        audioTracks: screenStream.getAudioTracks().length
-      });
 
       // Log video track info to verify it's screen, not webcam
       const videoTrack = screenStream.getVideoTracks()[0];
       if (videoTrack) {
         const settings = videoTrack.getSettings();
-        console.log('[Recording] Video track info:', {
-          label: videoTrack.label,
-          kind: videoTrack.kind,
-          width: settings.width,
-          height: settings.height,
-          frameRate: settings.frameRate,
-          deviceId: settings.deviceId
-        });
         
         // WARNING: If label contains "camera" or "webcam", we captured wrong device!
         if (videoTrack.label.toLowerCase().includes('camera') || 
             videoTrack.label.toLowerCase().includes('webcam')) {
           console.error('[Recording] WARNING: Captured webcam instead of screen!');
-          console.error('[Recording] Video track label:', videoTrack.label);
         }
       }
 
@@ -371,13 +263,11 @@ export class ScreenRecorder {
       
       // Start disk space monitoring
       this.startDiskSpaceMonitoring((reason, available) => {
-        console.warn('Stopping recording:', reason);
         this.stopRecording();
       });
       
       // Set max duration timer
       this.maxDurationTimer = setTimeout(() => {
-        console.log('Max duration reached');
         this.stopRecording();
       }, this.MAX_DURATION);
       
@@ -581,28 +471,19 @@ export class ScreenRecorder {
       const duration = (Date.now() - this.startTime) / 1000;
       
       // Save to temporary location
-      console.log('[Recording] Saving blob to file...');
       const tempPath = await this.saveBlobToFile(blob);
-      console.log('[Recording] File saved to:', tempPath);
       
       // Log success with metrics
       this.diagnostics.logRecordingSuccess(duration, blob.size, tempPath);
       
       // Callback with file path (BEFORE cleanup to preserve callbacks)
-      console.log('[Recording] Calling onComplete callback with path:', tempPath);
-      console.log('[Recording] Callbacks object:', this.callbacks);
-      console.log('[Recording] onComplete exists?', !!this.callbacks.onComplete);
       if (this.callbacks.onComplete) {
-        console.log('[Recording] onComplete callback exists, calling it now...');
         try {
           await this.callbacks.onComplete(tempPath);
-          console.log('[Recording] onComplete callback finished successfully');
         } catch (callbackError) {
           console.error('[Recording] onComplete callback failed:', callbackError);
         }
       } else {
-        console.warn('[Recording] No onComplete callback registered!');
-        console.warn('[Recording] Available callbacks:', Object.keys(this.callbacks));
       }
       
       // Cleanup streams (AFTER callback)
@@ -618,13 +499,11 @@ export class ScreenRecorder {
 
   // Save blob to file
   async saveBlobToFile(blob) {
-    console.log('[Recording] saveBlobToFile called with blob size:', blob.size);
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       
       reader.onload = async () => {
         try {
-          console.log('[Recording] FileReader loaded, processing buffer...');
           const buffer = reader.result;
           const timestamp = Date.now();
           const fileName = `Recording_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
@@ -633,14 +512,10 @@ export class ScreenRecorder {
           const recordingsDir = await window.electronAPI.getAppPath('userData');
           const recordingsPath = `${recordingsDir}/Recordings`;
           const filePath = `${recordingsPath}/${fileName}`;
-          console.log('[Recording] User data dir:', recordingsDir);
-          console.log('[Recording] Recordings dir:', recordingsPath);
-          console.log('[Recording] Writing file to:', filePath);
           
           // Write the file (this should create the directory if needed)
           await window.electronAPI.fileSystem.writeFile(filePath, new Uint8Array(buffer));
           
-          console.log('[Recording] File written successfully');
           resolve(filePath);
         } catch (error) {
           console.error('[Recording] Error saving file:', error);
@@ -806,13 +681,11 @@ export class ScreenRecorder {
       
       // Start disk space monitoring
       this.startDiskSpaceMonitoring((reason, available) => {
-        console.warn('Stopping recording:', reason);
         this.stopRecording();
       });
       
       // Set max duration timer
       this.maxDurationTimer = setTimeout(() => {
-        console.log('Max duration reached');
         this.stopRecording();
       }, this.MAX_DURATION);
       
@@ -836,9 +709,6 @@ export class ScreenRecorder {
     this.callbacks = callbacks;
     
     try {
-      console.log('[Composite] Starting composite recording');
-      console.log('[Composite] Screen source:', screenSource.name);
-      console.log('[Composite] Webcam source:', webcamSource.label);
       
       // Validate requirements
       const validation = await this.validateRecordingRequirements(screenSource, microphoneSource);
@@ -849,7 +719,6 @@ export class ScreenRecorder {
       
       // Get screen stream
       const videoConstraints = this.getVideoConstraints(quality);
-      console.log('[Composite] Screen video constraints:', videoConstraints);
       
       const screenStream = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -860,10 +729,8 @@ export class ScreenRecorder {
           }
         }
       });
-      console.log('[Composite] Screen stream obtained');
       
       // Get webcam stream with fixed 720p
-      console.log('[Composite] Requesting webcam stream (fixed 720p)');
       const webcamStream = await navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: webcamSource.deviceId,
@@ -872,13 +739,11 @@ export class ScreenRecorder {
         },
         audio: false
       });
-      console.log('[Composite] Webcam stream obtained');
       
       // Create off-screen canvas for composition
       const canvas = document.createElement('canvas');
       canvas.width = videoConstraints.width.ideal;
       canvas.height = videoConstraints.height.ideal;
-      console.log('[Composite] Canvas created:', canvas.width, 'x', canvas.height);
       
       // Initialize compositor
       const compositor = new VideoCompositor();
@@ -886,11 +751,9 @@ export class ScreenRecorder {
       await compositor.setScreenStream(screenStream);
       await compositor.setWebcamStream(webcamStream);
       compositor.startComposition();
-      console.log('[Composite] Composition started');
       
       // Get composite stream from canvas
       this.recordingStream = compositor.getCompositeStream();
-      console.log('[Composite] Composite stream created');
       
       // Store compositor for cleanup
       this.compositor = compositor;
@@ -899,7 +762,6 @@ export class ScreenRecorder {
       
       // Get microphone stream if selected
       if (microphoneSource) {
-        console.log('[Composite] Adding microphone audio');
         this.audioStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             deviceId: microphoneSource.deviceId,
@@ -931,11 +793,9 @@ export class ScreenRecorder {
       
       // Set max duration timer
       this.maxDurationTimer = setTimeout(() => {
-        console.log('Max duration reached');
         this.stopRecording();
       }, this.MAX_DURATION);
       
-      console.log('[Composite] Recording started successfully');
       
       // Callback on start
       if (this.callbacks.onStart) {
@@ -953,11 +813,9 @@ export class ScreenRecorder {
   }
 
   cleanup() {
-    console.log('[Recording] Starting cleanup...');
     
     // Stop compositor if active
     if (this.compositor) {
-      console.log('[Recording] Cleaning up compositor');
       this.compositor.cleanup();
       this.compositor = null;
     }
@@ -977,9 +835,7 @@ export class ScreenRecorder {
     // Stop all video/audio tracks
     if (this.recordingStream) {
       const tracks = this.recordingStream.getTracks();
-      console.log('[Recording] Stopping', tracks.length, 'track(s) from recording stream');
       tracks.forEach(track => {
-        console.log('  - Stopping track:', track.kind, track.label, 'readyState:', track.readyState);
         if (track.readyState === 'live') {
           track.stop();
         }
@@ -1007,7 +863,6 @@ export class ScreenRecorder {
     // Stop and clear media recorder
     if (this.mediaRecorder) {
       if (this.mediaRecorder.state !== 'inactive') {
-        console.log('[Recording] Stopping active MediaRecorder, state:', this.mediaRecorder.state);
         try {
           this.mediaRecorder.stop();
         } catch (error) {
@@ -1019,13 +874,11 @@ export class ScreenRecorder {
 
     // Clear recorded data
     if (this.recordedChunks && this.recordedChunks.length > 0) {
-      console.log('[Recording] Clearing', this.recordedChunks.length, 'recorded chunks');
       this.recordedChunks = [];
     }
     
     this.startTime = null;
     this.callbacks = {};
     
-    console.log('[Recording] Cleanup complete');
   }
 }

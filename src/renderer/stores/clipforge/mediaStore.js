@@ -21,7 +21,6 @@ export const useClipForgeMediaStore = defineStore('clipforge-media', () => {
       // Check if file already imported (by path)
       const existing = mediaFiles.value.find(f => f.filePath === fileData.filePath);
       if (existing) {
-        console.warn('File already imported:', fileData.filePath);
         return existing.id;
       }
 

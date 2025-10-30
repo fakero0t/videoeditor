@@ -71,9 +71,7 @@
 <script setup>
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import clipforgeFFmpegService from '../../shared/clipforge/ffmpegService';
-import audioforgeFFmpegService from '../../shared/audioforge/ffmpegService';
 import { buildExportPlan } from '../services/exportAssembler';
 
 const props = defineProps({
@@ -82,13 +80,8 @@ const props = defineProps({
 });
 const emit = defineEmits(['close']);
 
-const timelineStore = props.appMode === 'clipforge' 
-  ? useClipForgeTimelineStore() 
-  : useAudioForgeTimelineStore();
-
-const ffmpegService = props.appMode === 'clipforge' 
-  ? clipforgeFFmpegService 
-  : audioforgeFFmpegService;
+const timelineStore = useClipForgeTimelineStore();
+const ffmpegService = clipforgeFFmpegService;
 
 const resolution = ref('source');
 const fps = ref('source');

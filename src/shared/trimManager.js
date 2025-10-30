@@ -64,7 +64,6 @@ class TrimManager {
         // Check left edge
         const leftDistance = Math.abs(mouseX - clipX);
         if (leftDistance <= this.handleWidth) {
-          console.log('Left edge detected:', { mouseX, clipX, leftDistance, handleWidth: this.handleWidth });
           this.hoveredEdge = 'left';
           this.hoveredClip = clip;
           return { edge: 'left', clip, trackId };
@@ -73,7 +72,6 @@ class TrimManager {
         // Check right edge
         const rightDistance = Math.abs(mouseX - (clipX + clipWidth));
         if (rightDistance <= this.handleWidth) {
-          console.log('Right edge detected:', { mouseX, clipX: clipX + clipWidth, rightDistance, handleWidth: this.handleWidth });
           this.hoveredEdge = 'right';
           this.hoveredClip = clip;
           return { edge: 'right', clip, trackId };

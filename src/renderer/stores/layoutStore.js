@@ -73,7 +73,6 @@ export const useLayoutStore = defineStore('layout', {
           }
         }
       } catch (error) {
-        console.warn('Failed to load layout sizes from storage:', error);
       }
     },
     
@@ -86,7 +85,6 @@ export const useLayoutStore = defineStore('layout', {
         };
         localStorage.setItem(this.storageKey, JSON.stringify(data));
       } catch (error) {
-        console.warn('Failed to save layout sizes to storage:', error);
       }
     },
     

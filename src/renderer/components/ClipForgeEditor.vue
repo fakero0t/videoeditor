@@ -1,7 +1,6 @@
 <template>
   <div id="app" class="app-container">
     <div class="app-header">
-      <BackButton @back="$emit('back')" />
       <h1>ClipForge</h1>
       <ProjectMenu :app-mode="appMode" />
       <button @click="openExport" :disabled="!canExport" class="export-btn" title="Export Timeline">
@@ -81,7 +80,6 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import BackButton from './BackButton.vue';
 import MediaLibrary from './MediaLibrary.vue';
 import Timeline from './Timeline.vue';
 import PreviewWindow from './PreviewWindow.vue';
@@ -109,8 +107,7 @@ const props = defineProps({
   }
 });
 
-// Emits
-defineEmits(['back']);
+// No emits needed since we removed the back button
 
 const appVersion = ref('');
 

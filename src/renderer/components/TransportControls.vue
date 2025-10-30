@@ -39,9 +39,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
-import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import { ClipForgePlaybackManager } from '../../shared/clipforge/playbackManager';
-import { AudioForgePlaybackManager } from '../../shared/audioforge/playbackManager';
 import { VideoPlayerPool } from '../../shared/videoPlayerPool';
 import PanToggle from './PanToggle.vue';
 
@@ -52,18 +50,14 @@ const props = defineProps({
   }
 });
 
-const timelineStore = props.appMode === 'clipforge' 
-  ? useClipForgeTimelineStore() 
-  : useAudioForgeTimelineStore();
+const timelineStore = useClipForgeTimelineStore();
 const videoPlayerPool = new VideoPlayerPool();
 
 // Create playback manager instance
 let playbackManager = null;
 
 onMounted(() => {
-  playbackManager = props.appMode === 'clipforge' 
-    ? new ClipForgePlaybackManager(timelineStore, videoPlayerPool)
-    : new AudioForgePlaybackManager(timelineStore, videoPlayerPool);
+  playbackManager = new ClipForgePlaybackManager(timelineStore, videoPlayerPool);
 });
 
 const isPlaying = ref(false);

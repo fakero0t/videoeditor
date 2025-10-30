@@ -3,7 +3,6 @@
 // and mix audio from all tracks, inserting black video and silence for gaps.
 
 import clipforgeFFmpegService from '../../shared/clipforge/ffmpegService';
-import audioforgeFFmpegService from '../../shared/audioforge/ffmpegService';
 
 const RESOLUTION_MAP = {
   '720p': { width: 1280, height: 720 },
@@ -255,9 +254,7 @@ function buildFilter(tracks, inputsMap, options, dims) {
 }
 
 export async function buildExportPlan(tracks, options, appMode = 'clipforge') {
-  const ffmpegService = appMode === 'clipforge' 
-    ? clipforgeFFmpegService 
-    : audioforgeFFmpegService;
+  const ffmpegService = clipforgeFFmpegService;
   const { inputs, pathToIndex } = buildInputMap(tracks);
   const dims = await deriveGraphDimensionsAndFps(tracks, options);
   const { filterComplex } = buildFilter(tracks, { pathToIndex }, options, dims);
