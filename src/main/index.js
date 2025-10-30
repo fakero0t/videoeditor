@@ -2,8 +2,19 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 import FFmpegHandler from './ffmpegHandler.js';
 import { RecordingHandler } from './recordingHandler.js';
+
+// Load environment variables
+dotenv.config();
+
+// Debug environment variables
+console.log('Environment variables loaded:');
+console.log('- OPENAI_API_KEY present:', !!process.env.OPENAI_API_KEY);
+console.log('- OPENAI_API_KEY length:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 0);
+console.log('- OPENAI_API_KEY starts with sk-:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.startsWith('sk-') : false);
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -462,3 +473,4 @@ let isCurrentlyRecording = false;
 ipcMain.handle('recording:setRecordingState', (event, recording) => {
   isCurrentlyRecording = recording;
 });
+

@@ -81,6 +81,7 @@ export const useClipForgeMediaStore = defineStore('clipforge-media', () => {
       return mediaFiles.value.find(file => file.filePath === filePath);
     };
 
+
     // Serialize for project save
     const serialize = () => {
       return mediaFiles.value.map(file => ({

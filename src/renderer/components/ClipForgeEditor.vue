@@ -7,6 +7,9 @@
       <button @click="openExport" :disabled="!canExport" class="export-btn" title="Export Timeline">
         Export
       </button>
+      <button @click="openBrollSearch" class="search-btn" title="Search B-roll">
+        🔍 Search B-roll
+      </button>
       <button @click="openRecordingPanel" class="record-toggle-btn" title="Record">
         ● Record
       </button>
@@ -65,6 +68,14 @@
     
     <!-- Export Dialog -->
     <ExportDialog :visible="showExport" :app-mode="appMode" @close="showExport = false" />
+    
+    <!-- B-roll Search Modal -->
+    <BrollSearchModal 
+      :visible="showBrollSearch" 
+      :app-mode="appMode" 
+      @close="showBrollSearch = false"
+      @insert-clip="handleClipInserted"
+    />
   </div>
 </template>
 
@@ -80,6 +91,7 @@ import SplitButton from './SplitButton.vue';
 import ProjectMenu from './ProjectMenu.vue';
 import RecordingPanel from './RecordingPanel.vue';
 import ExportDialog from './ExportDialog.vue';
+import BrollSearchModal from './BrollSearchModal.vue';
 import ResizeHandle from './ResizeHandle.vue';
 import { useClipForgeProjectStore } from '../stores/clipforge/projectStore';
 import { useClipForgeRecordingStore } from '../stores/clipforge/recordingStore';
@@ -109,6 +121,7 @@ const mediaStore = useClipForgeMediaStore();
 const layoutStore = useLayoutStore();
 
 const showExport = ref(false);
+const showBrollSearch = ref(false);
 const videoPlayerPool = new VideoPlayerPool();
 let playbackManager = null;
 
@@ -130,6 +143,17 @@ const openExport = () => {
     }
     showExport.value = true;
   }
+};
+
+// Method to open B-roll search
+const openBrollSearch = () => {
+  showBrollSearch.value = true;
+};
+
+// Handle clip insertion from search
+const handleClipInserted = (clip) => {
+  console.log('Clip inserted from search:', clip.fileName);
+  // The modal already handles the insertion, this is just for logging/feedback
 };
 
 // Prevent close during save, recording, or with unsaved changes
@@ -330,7 +354,8 @@ body {
   align-items: center;
 }
 
-.export-btn {
+.export-btn,
+.search-btn {
   @include d3-object;
   @include font;
   padding: 4px 12px;
@@ -354,6 +379,16 @@ body {
   &:disabled {
     @include font-color('font-disabled');
     cursor: not-allowed;
+  }
+}
+
+.search-btn {
+  background: #0066cc;
+  color: white;
+  font-weight: bold;
+  
+  &:hover:not(:disabled) {
+    background: #0052a3;
   }
 }
 

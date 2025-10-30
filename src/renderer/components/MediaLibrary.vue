@@ -38,9 +38,21 @@
     <!-- Header with import button -->
     <div class="library-header">
       <h3>{{ libraryTitle }}</h3>
-      <button @click="handleImportClick" class="import-btn" :disabled="mediaStore && mediaStore.importStatus === 'importing'">
-        + Import Files
-      </button>
+      <div class="header-actions">
+        <!-- Indexing status indicator (only for ClipForge) -->
+        <div v-if="appMode === 'clipforge' && indexingStatus" class="indexing-status">
+          <div v-if="indexingStatus.isIndexing" class="indexing-active">
+            <div class="indexing-spinner">⟳</div>
+            <span>Indexing {{ indexingStatus.progress.current }}/{{ indexingStatus.progress.total }}</span>
+          </div>
+          <div v-else-if="searchStats && !searchStats.indexingComplete" class="indexing-pending">
+            <span>{{ searchStats.unindexedClips }} clips pending</span>
+          </div>
+        </div>
+        <button @click="handleImportClick" class="import-btn" :disabled="mediaStore && mediaStore.importStatus === 'importing'">
+          + Import Files
+        </button>
+      </div>
     </div>
 
     <!-- Clips Grid -->
@@ -130,6 +142,7 @@ import { useAudioForgeMediaStore } from '../stores/audioforge/mediaStore';
 import { useClipForgeTimelineStore } from '../stores/clipforge/timelineStore';
 import { useAudioForgeTimelineStore } from '../stores/audioforge/timelineStore';
 import ImportService from '../services/importService';
+import { brollSearchService } from '../services/brollSearchService';
 import { formatDuration, formatFileSize, getVideoCodecName } from '../../shared/utils/videoUtils';
 
 // Props
@@ -152,6 +165,11 @@ const importService = new ImportService(props.appMode);
 const isDragOver = ref(false);
 const selectedClip = ref(null);
 const draggingClip = ref(null);
+
+// B-roll search status (only for ClipForge)
+const indexingStatus = ref(null);
+const searchStats = ref(null);
+let indexingInterval = null;
 
 // Computed properties for dynamic text based on appMode
 const libraryTitle = computed(() => {
@@ -200,6 +218,73 @@ const handleDrop = async (event) => {
   }
 };
 
+// Auto-indexing logic
+const triggerAutoIndexing = async (fileIds) => {
+  try {
+    // Check if API key is available
+    const service = brollSearchService();
+    const hasApiKey = await service.hasApiKey();
+    if (!hasApiKey) {
+      console.log('OpenAI API key not configured, skipping auto-indexing');
+      return;
+    }
+
+    // Get the clips that were just added
+    const clipsToIndex = fileIds
+      .map(id => mediaStore.getMediaFileById(id))
+      .filter(clip => clip && !clip.indexed);
+
+    if (clipsToIndex.length === 0) {
+      console.log('No new clips to index');
+      return;
+    }
+
+    console.log(`Starting auto-indexing for ${clipsToIndex.length} clips`);
+    
+    // Index clips in background (don't block UI)
+    service.indexAllClips((progress) => {
+      console.log(`Indexing progress: ${progress.current}/${progress.total}`);
+    }).then(result => {
+      console.log(`Auto-indexing completed: ${result.successful} successful, ${result.failed} failed`);
+    }).catch(error => {
+      console.error('Auto-indexing failed:', error);
+    });
+
+  } catch (error) {
+    console.error('Failed to trigger auto-indexing:', error);
+  }
+};
+
+// Indexing status monitoring (only for ClipForge)
+const updateIndexingStatus = () => {
+  if (props.appMode !== 'clipforge') return;
+  
+  try {
+    const service = brollSearchService();
+    indexingStatus.value = service.getIndexingStatus();
+    searchStats.value = service.getSearchStats();
+  } catch (error) {
+    console.error('Failed to update indexing status:', error);
+  }
+};
+
+const startIndexingMonitoring = () => {
+  if (props.appMode !== 'clipforge') return;
+  
+  // Update immediately
+  updateIndexingStatus();
+  
+  // Update every 2 seconds
+  indexingInterval = setInterval(updateIndexingStatus, 2000);
+};
+
+const stopIndexingMonitoring = () => {
+  if (indexingInterval) {
+    clearInterval(indexingInterval);
+    indexingInterval = null;
+  }
+};
+
 // Import logic
 const importFiles = async (filePaths) => {
   mediaStore.setImportStatus('importing');
@@ -215,8 +300,10 @@ const importFiles = async (filePaths) => {
     );
     
     // Add successfully processed files to store
+    const addedFileIds = [];
     results.forEach(fileData => {
-      mediaStore.addMediaFile(fileData);
+      const fileId = mediaStore.addMediaFile(fileData);
+      addedFileIds.push(fileId);
     });
     
     // Store errors
@@ -225,6 +312,11 @@ const importFiles = async (filePaths) => {
     });
     
     mediaStore.setImportStatus(errors.length > 0 ? 'error' : 'success');
+    
+    // Trigger auto-indexing for successfully imported clips (only for ClipForge)
+    if (props.appMode === 'clipforge' && results.length > 0) {
+      triggerAutoIndexing(addedFileIds);
+    }
     
     // Clear success status after 2 seconds
     if (errors.length === 0) {
@@ -388,11 +480,17 @@ const handleThumbnailError = (event) => {
 onMounted(() => {
   document.addEventListener('dragover', handleGlobalDragOver);
   document.addEventListener('dragleave', handleGlobalDragLeave);
+  
+  // Start indexing monitoring for ClipForge
+  startIndexingMonitoring();
 });
 
 onUnmounted(() => {
   document.removeEventListener('dragover', handleGlobalDragOver);
   document.removeEventListener('dragleave', handleGlobalDragLeave);
+  
+  // Stop indexing monitoring
+  stopIndexingMonitoring();
 });
 </script>
 
@@ -537,6 +635,43 @@ onUnmounted(() => {
   @include font-color('font-color');
   font-size: 12px;
   font-weight: bold;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.indexing-status {
+  @include font-color('font-color');
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.indexing-active {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #0066cc;
+  font-weight: bold;
+}
+
+.indexing-pending {
+  color: #ff6600;
+  font-style: italic;
+}
+
+.indexing-spinner {
+  font-size: 12px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .import-btn {
